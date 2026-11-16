@@ -4,3 +4,5 @@ dvc==3.67.1
 ipykernel
 nbconvert
 matplotlib
+implicit==0.7.3
+scipy==1.18.1

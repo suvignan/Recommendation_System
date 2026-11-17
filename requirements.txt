@@ -6,3 +6,4 @@ nbconvert
 matplotlib
 implicit==0.7.3
 scipy==1.18.1
+tensorflow==2.20.0

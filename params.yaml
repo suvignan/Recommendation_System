@@ -1,0 +1,38 @@
+# What I CHOSE: every decision from the notebooks, with the day it was made.
+# Changing a value here is an experiment, not a fix.
+
+window:
+  weeks: 12                     # Day 1: the last 12 weeks of data (recent enough, small enough)
+  start_date: "2020-07-01"      # Day 1/3: last date (2020-09-22) minus 12 weeks -> a Wednesday, so weeks run Wed-Tue
+
+dedup:
+  # Day 2/3: a duplicate = same day + same customer + same article (price and channel NOT included)
+  key_columns: [t_dat, customer_join_idx, article_id]
+
+split:                          # Day 3: week = whole weeks since start_date
+  train_weeks: [0, 9]           # first and last train week
+  val_week: 10
+  test_week: 11
+
+# Day 1/3: row counts for THIS frozen snapshot only. They depend on the window above, so they are a
+# choice, not a fact about H&M's data. Used as a reproducibility check (the pipeline must reproduce
+# the notebooks); a live weekly run sets them to null and relies on the schema rules instead.
+expected_rows:
+  window: 3386963
+  after_dedup: 3085875
+
+features:
+  age_edges: [16, 20, 25, 30, 40, 50, 60, 100]   # Day 5: 7 buckets, [left, right), missing age = bucket 0
+
+als:                            # Day 7 (copied from models/als/settings.json); Day 8: filter off won
+  factors: 64
+  iterations: 15
+  regularization: 0.05
+  alpha: 40
+  random_state: 42
+  filter_already_liked_items: false
+
+recommend:
+  k: 10                         # Day 6: recall@10 / NDCG@10, 10 articles per customer
+  repurchase_max: 10            # Day 8: own purchases, newest first, each once, at most 10
+  filler_candidates: 30         # Day 10: ask the filler for 30 so lists never come up short after skipping own articles

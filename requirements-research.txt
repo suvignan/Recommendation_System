@@ -1,0 +1,8 @@
+# The notebooks (two-tower model, plots, running notebooks). NOT needed by the pipeline or the API,
+# so TensorFlow stays out of the pipeline install and the Docker image.
+-r requirements.txt
+tensorflow==2.20.0
+keras==3.15.1
+matplotlib==3.11.2
+ipykernel==7.4.0
+nbconvert==7.17.2

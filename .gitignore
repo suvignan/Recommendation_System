@@ -1,5 +1,14 @@
 .env
 .venv/
+
+# Data and pipeline outputs go to DVC, never Git.
+# Not the whole data/ folder: the DVC pointer data/RAW.dvc must stay in Git (DVC's own data/.gitignore hides data/RAW).
 data/processed/
+artifacts/
 models/
 results/
+logs/
+
+# pip install -e .
+*.egg-info/
+__pycache__/

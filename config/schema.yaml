@@ -1,0 +1,49 @@
+# What the raw data IS: the contract every input must meet.
+# If it breaks, the data is wrong and the run stops. A schema is never "tuned".
+# Dtypes are the Parquet types as stored in data/RAW (checked with pyarrow on Day 12).
+
+transactions:
+  file: transactions_train.parquet
+  columns:
+    t_dat: string              # 'YYYY-MM-DD', parsed to a date during ingestion
+    customer_id: string        # 64-character hash
+    article_id: int64
+    price: double
+    sales_channel_id: int64
+
+customers:
+  file: customers.parquet
+  columns:
+    customer_id: string
+    FN: double                 # 1.0 or missing (missing = "no", Day 5)
+    Active: double             # 1.0 or missing
+    club_member_status: string
+    fashion_news_frequency: string
+    age: double
+    postal_code: string
+  # Missing values are allowed in these columns; any OTHER value means the data changed: stop.
+  allowed_values:
+    club_member_status: [ACTIVE, PRE-CREATE, LEFT CLUB]
+    fashion_news_frequency: [NONE, Regularly, Monthly]
+  # Day 5: H&M writes one category two ways ("None" in 2 rows, "NONE" in 877,711).
+  # It's a fact about the data, so it lives in the contract: alias -> the one real spelling.
+  known_aliases:
+    fashion_news_frequency:
+      "None": NONE
+
+articles:
+  file: articles.parquet
+  columns:                     # only the columns the pipeline uses; a rename or type change stops the run
+    article_id: int64
+    product_code: int64
+    prod_name: string
+    product_type_no: int64
+    product_type_name: string
+    product_group_name: string
+    graphical_appearance_name: string
+    colour_group_name: string
+    perceived_colour_master_name: string
+    department_no: int64
+    index_group_name: string
+    section_name: string
+    garment_group_name: string

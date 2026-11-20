@@ -31,6 +31,15 @@ customers:
     fashion_news_frequency:
       "None": NONE
 
+ingested_transactions:         # the table DataIngestion hands to every later stage (pandas dtypes)
+  columns:
+    t_dat: datetime64[us]
+    customer_join_idx: int32
+    article_id: int32
+    price: float32
+    sales_channel_id: int8
+    week: int64
+
 articles:
   file: articles.parquet
   columns:                     # only the columns the pipeline uses; a rename or type change stops the run

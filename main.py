@@ -1,5 +1,11 @@
-"""Runs the training pipeline end to end: `python main.py`. The stages are added on Days 12-14."""
+"""Runs the training pipeline end to end: `python main.py`."""
+from recsys.exception import RecsysException
 from recsys.logger import logger
+from recsys.pipeline.training_pipeline import TrainingPipeline
 
 if __name__ == "__main__":
-    logger.info("Training pipeline: no stages yet (DataIngestion and DataValidation come next)")
+    try:
+        TrainingPipeline().run()
+    except RecsysException as error:
+        logger.error(f"Pipeline stopped: {error}")
+        raise

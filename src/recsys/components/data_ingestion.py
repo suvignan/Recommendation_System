@@ -2,6 +2,8 @@ import time
 from datetime import timedelta
 
 import pandas as pd
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 
 from recsys.entity.config_entity import (
     DataIngestionConfig,
@@ -23,6 +25,17 @@ class DataIngestion:
 
         try:
             total_start = time.perf_counter()
+            step_start = time.perf_counter()
+
+            # 6a-0: The text filter below only works if EVERY raw t_dat is written 'YYYY-MM-DD':
+            # '2020-7-1' would be silently left out of the window. Validation only sees the filtered output,
+            # so ingestion counts badly formatted dates over the WHOLE raw column and validation judges the count.
+            raw_dates = pq.read_table(self.config.transactions_file, columns=['t_dat'])['t_dat']
+            well_formed = pc.sum(pc.match_substring_regex(raw_dates, r'^\d{4}-\d{2}-\d{2}$')).as_py() or 0
+            raw_bad_date_rows = len(raw_dates) - well_formed
+            del raw_dates
+            logger.info(f"Raw t_dat format check: {raw_bad_date_rows:,} rows not 'YYYY-MM-DD' "
+                        f"in {time.perf_counter() - step_start:.1f}s")
             step_start = time.perf_counter()
 
             # 6a: Read transactions: only the window, only the needed columns
@@ -134,6 +147,7 @@ class DataIngestion:
                 customer_map_path=output_dir / 'customer_map.parquet',
                 rows_in_window=rows_in_window,
                 rows_after_dedup=rows_after_dedup,
+                raw_bad_date_rows=raw_bad_date_rows,
             )
 
         except Exception as error:

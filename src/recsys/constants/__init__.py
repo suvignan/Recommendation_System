@@ -11,3 +11,5 @@ RAW_DIR = ROOT / "data" / "RAW"                      # DVC-tracked H&M files
 ARTIFACT_DIR = ROOT / "artifacts"                    # pipeline outputs, one folder per stage
 INGESTION_DIR = ARTIFACT_DIR / "data_ingestion"
 VALIDATION_DIR = ARTIFACT_DIR / "data_validation"
+SPLIT_DIR = ARTIFACT_DIR / "data_splitter"
+LISTS_DIR = ARTIFACT_DIR / "list_builder"          # one subfolder per history_end_week (evaluation vs serving)

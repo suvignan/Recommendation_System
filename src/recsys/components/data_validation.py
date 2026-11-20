@@ -190,6 +190,15 @@ class DataValidation:
                 f'expected {expected:,}, found {len(transactions):,}'
             )
 
+    # Check 11: the window filter compares t_dat as TEXT, which only works for 'YYYY-MM-DD' (counted by ingestion)
+    def validate_raw_date_format(self):
+        bad = self.config.raw_bad_date_rows
+        self.record(
+            "raw t_dat written 'YYYY-MM-DD'",
+            bad == 0,
+            f"raw rows not 'YYYY-MM-DD': {bad:,} (they would be silently left out of the window)"
+        )
+
     def run(self) -> DataValidationArtifact:
         try:
             start_time = time.perf_counter()
@@ -206,6 +215,7 @@ class DataValidation:
             self.validate_allowed_values(customers)
             self.validate_no_duplicates(transactions)
             self.validate_row_count(transactions)
+            self.validate_raw_date_format()
 
             failed = [result['check'] for result in self.results if not result['passed']]
             report = {

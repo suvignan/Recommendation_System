@@ -60,6 +60,7 @@ class DataValidationConfig:
     window_weeks: int
     dedup_key: tuple[str, ...]
     expected_after_dedup: int | None
+    raw_bad_date_rows: int                   # measured by ingestion over the whole raw t_dat column
     report_path: Path
 
 
@@ -79,5 +80,62 @@ def get_validation_config(ingestion_artifact: DataIngestionArtifact, schema_file
         window_weeks=params["window"]["weeks"],
         dedup_key=tuple(params["dedup"]["key_columns"]),
         expected_after_dedup=params["expected_rows"]["after_dedup"],
+        raw_bad_date_rows=ingestion_artifact.raw_bad_date_rows,
         report_path=constants.VALIDATION_DIR / "report.json",
+    )
+
+
+@dataclass(frozen=True)
+class DataSplitterConfig:
+    transactions_path: Path                  # ingestion's output (already validated)
+    train_first_week: int
+    train_last_week: int
+    val_week: int
+    test_week: int
+    expected_train: int | None               # None = live run: don't check counts
+    expected_val: int | None
+    expected_test: int | None
+    output_dir: Path
+
+
+def get_splitter_config(ingestion_artifact: DataIngestionArtifact, params_file=constants.PARAMS_FILE) -> DataSplitterConfig:
+    params = read_yaml(params_file)
+    first_week, last_week = params["split"]["train_weeks"]
+    return DataSplitterConfig(
+        transactions_path=ingestion_artifact.transactions_path,
+        train_first_week=first_week,
+        train_last_week=last_week,
+        val_week=params["split"]["val_week"],
+        test_week=params["split"]["test_week"],
+        expected_train=params["expected_rows"]["train"],
+        expected_val=params["expected_rows"]["val"],
+        expected_test=params["expected_rows"]["test"],
+        output_dir=constants.SPLIT_DIR,
+    )
+
+
+@dataclass(frozen=True)
+class ListBuilderConfig:
+    transactions_path: Path                  # ALL ingested weeks; history_end_week decides how much of it is used
+    customers_path: Path                     # for the age bucket
+    history_end_week: int                    # 9 = evaluation lists (scored on week 10), 11 = serving lists
+    k: int                                   # 10 articles per list
+    repurchase_max: int                      # at most 10 own purchases
+    filler_candidates: int                   # the last-week list keeps the top 30
+    age_edges: tuple[int, ...]
+    output_dir: Path
+
+
+def get_list_builder_config(ingestion_artifact: DataIngestionArtifact, history_end_week: int,
+                            params_file=constants.PARAMS_FILE) -> ListBuilderConfig:
+    params = read_yaml(params_file)
+    return ListBuilderConfig(
+        transactions_path=ingestion_artifact.transactions_path,
+        customers_path=ingestion_artifact.customers_path,
+        history_end_week=history_end_week,
+        k=params["recommend"]["k"],
+        repurchase_max=params["recommend"]["repurchase_max"],
+        filler_candidates=params["recommend"]["filler_candidates"],
+        age_edges=tuple(params["features"]["age_edges"]),
+        output_dir=constants.LISTS_DIR / f"history_to_week_{history_end_week}",
     )

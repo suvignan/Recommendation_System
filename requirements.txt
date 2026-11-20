@@ -1,7 +1,7 @@
 # The training pipeline: only what src/recsys imports, each pinned to the installed version.
 # Pinned because implicit changed its matrix layout between versions (Day 7): unpinned, a fresh
 # install could silently train on a transposed matrix.
-# Added when first used: mlflow (Day 14), pytest (Day 15).
+# Added when first used: mlflow (Day 14).
 numpy==2.5.4
 pandas==3.0.6
 pyarrow==26.0.0
@@ -9,3 +9,4 @@ scipy==1.18.1
 implicit==0.7.3
 PyYAML==6.0.3
 dvc==3.67.1
+pytest==9.2.0

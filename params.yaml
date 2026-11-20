@@ -20,6 +20,13 @@ split:                          # Day 3: week = whole weeks since start_date
 expected_rows:
   window: 3386963
   after_dedup: 3085875
+  train: 2638103                # Day 3: weeks 0-9
+  val: 230980                   # week 10
+  test: 216792                  # week 11
+
+lists:
+  evaluation_history_end_week: 9   # lists from weeks 0-9, scored against week 10: the Day 14 gate checks 0.0495
+  serving_history_end_week: 11     # lists from every week we have: next week's lookup table for the API
 
 features:
   age_edges: [16, 20, 25, 30, 40, 50, 60, 100]   # Day 5: 7 buckets, [left, right), missing age = bucket 0

@@ -3,7 +3,8 @@ from datetime import date
 from pathlib import Path
 
 from recsys import constants
-from recsys.entity.artifact_entity import DataIngestionArtifact
+from recsys.entity.artifact_entity import (DataIngestionArtifact, DataSplitterArtifact, ListBuilderArtifact,
+                                           ModelEvaluationArtifact, ModelTrainerArtifact)
 from recsys.utils.common import read_yaml
 
 # What each stage NEEDS. The get_..._config functions are the ONLY place that reads schema.yaml and params.yaml;
@@ -138,4 +139,114 @@ def get_list_builder_config(ingestion_artifact: DataIngestionArtifact, history_e
         filler_candidates=params["recommend"]["filler_candidates"],
         age_edges=tuple(params["features"]["age_edges"]),
         output_dir=constants.LISTS_DIR / f"history_to_week_{history_end_week}",
+    )
+
+@dataclass(frozen=True)
+class ModelTrainerConfig:
+    transactions_path: Path
+    history_end_week: int
+    factors: int
+    regularization: float
+    iterations: int
+    alpha: float
+    random_state: int
+    output_dir: Path
+def get_model_trainer_config(ingestion_artifact: DataIngestionArtifact, history_end_week: int,
+                             params_file=constants.PARAMS_FILE) -> ModelTrainerConfig:
+    params = read_yaml(params_file)
+    return ModelTrainerConfig(
+        transactions_path=ingestion_artifact.transactions_path,
+        history_end_week=history_end_week,
+        factors=params["als"]["factors"],
+        regularization=params["als"]["regularization"],
+        iterations=params["als"]["iterations"],
+        alpha=params["als"]["alpha"],
+        random_state=params["als"]["random_state"],
+        output_dir=constants.MODEL_TRAINER_DIR / f"w{history_end_week:02d}",      # 9 -> w09
+    )
+
+
+@dataclass(frozen=True)
+class ModelEvaluationConfig:
+    val_path: Path                   # the answer key: what each customer bought in the week AFTER the history
+    customers_path: Path             # age -> bucket, for cold customers
+    repurchase_path: Path            # the three list files from ListBuilder (long format)
+    last_week_path: Path
+    age_bucket_path: Path
+    user_factors_path: Path          # the ALS parts from ModelTrainer
+    item_factors_path: Path
+    customer_map_path: Path
+    article_map_path: Path
+    history_end_week: int            # the lists and the model must both be built from weeks 0..this
+    k: int                           # 10
+    filler_candidates: int           # ALS top 30, so the list never comes up short after skipping own articles
+    age_edges: tuple[int, ...]
+    reference_recall: float | None   # snapshot parity; None in a live weekly run
+    reference_tolerance: float
+    min_lift_over_popularity: float  # live gate: system recall >= this x popularity recall (same customers, same run)
+    cold_must_beat_popularity: bool
+    report_path: Path
+
+
+def get_evaluation_config(ingestion_artifact: DataIngestionArtifact, splitter_artifact: DataSplitterArtifact,
+                          lists_artifact: ListBuilderArtifact, trainer_artifact: ModelTrainerArtifact,
+                          params_file=constants.PARAMS_FILE) -> ModelEvaluationConfig:
+    params = read_yaml(params_file)
+    return ModelEvaluationConfig(
+        val_path=splitter_artifact.val_path,
+        customers_path=ingestion_artifact.customers_path,
+        repurchase_path=lists_artifact.repurchase_path,
+        last_week_path=lists_artifact.last_week_path,
+        age_bucket_path=lists_artifact.age_bucket_path,
+        user_factors_path=trainer_artifact.user_factors_path,
+        item_factors_path=trainer_artifact.item_factors_path,
+        customer_map_path=trainer_artifact.customer_map_path,
+        article_map_path=trainer_artifact.article_map_path,
+        history_end_week=lists_artifact.history_end_week,
+        k=params["recommend"]["k"],
+        filler_candidates=params["recommend"]["filler_candidates"],
+        age_edges=tuple(params["features"]["age_edges"]),
+        reference_recall=params["gate"]["reference_recall"],
+        reference_tolerance=params["gate"]["reference_tolerance"],
+        min_lift_over_popularity=params["gate"]["min_lift_over_popularity"],
+        cold_must_beat_popularity=params["gate"]["cold_must_beat_popularity"],
+        report_path=constants.MODEL_EVALUATION_DIR / f"report_w{lists_artifact.history_end_week:02d}.json",
+    )
+
+
+@dataclass(frozen=True)
+class RecommendationTableConfig:
+    gate_passed: bool                # from the evaluation artifact: a recipe that failed evaluation never builds a table
+    customers_path: Path             # ingestion: customer_id, customer_join_idx, age (ALL customers, buyers or not)
+    repurchase_path: Path            # serving lists (ListBuilder, history_end_week = serving week)
+    age_bucket_path: Path
+    user_factors_path: Path          # serving ALS (ModelTrainer, same history)
+    item_factors_path: Path
+    customer_map_path: Path
+    article_map_path: Path
+    history_end_week: int
+    k: int
+    filler_candidates: int
+    age_edges: tuple[int, ...]
+    output_dir: Path
+
+
+def get_table_config(ingestion_artifact: DataIngestionArtifact, evaluation_artifact: ModelEvaluationArtifact,
+                     lists_artifact: ListBuilderArtifact, trainer_artifact: ModelTrainerArtifact,
+                     params_file=constants.PARAMS_FILE) -> RecommendationTableConfig:
+    params = read_yaml(params_file)
+    return RecommendationTableConfig(
+        gate_passed=evaluation_artifact.gate_passed,
+        customers_path=ingestion_artifact.customers_path,
+        repurchase_path=lists_artifact.repurchase_path,
+        age_bucket_path=lists_artifact.age_bucket_path,
+        user_factors_path=trainer_artifact.user_factors_path,
+        item_factors_path=trainer_artifact.item_factors_path,
+        customer_map_path=trainer_artifact.customer_map_path,
+        article_map_path=trainer_artifact.article_map_path,
+        history_end_week=lists_artifact.history_end_week,
+        k=params["recommend"]["k"],
+        filler_candidates=params["recommend"]["filler_candidates"],
+        age_edges=tuple(params["features"]["age_edges"]),
+        output_dir=constants.RECOMMENDATION_TABLE_DIR,
     )

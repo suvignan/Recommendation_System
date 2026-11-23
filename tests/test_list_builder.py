@@ -4,6 +4,7 @@ from recsys.components.list_builder import (
     ListBuilder,
     repurchase_lists,
     age_to_bucket,
+    last_week_top,
 )
 from recsys.entity.config_entity import ListBuilderConfig
 
@@ -122,3 +123,13 @@ def test_short_bucket_filled_from_global_without_duplicates(tmp_path):
     assert young == [901, 902, 1, 2, 3]        # own articles first, then the global list in order
     assert len(young) == 5
     assert len(set(young)) == len(young)       # no article twice
+
+
+def test_same_date_smaller_article_first():
+    history = make_history([('2020-07-01', 1, 500), ('2020-07-01', 1, 300)])
+    assert repurchase_lists(history, 10)[1] == [300, 500]
+
+
+def test_same_count_smaller_article_first():
+    history = make_history([('2020-07-01', 1, 500), ('2020-07-01', 2, 300), ('2020-07-01', 3, 700), ('2020-07-01', 4, 700)])
+    assert last_week_top(history, 0, 3) == [700, 300, 500]       # 700 bought twice; 300 and 500 tie on once

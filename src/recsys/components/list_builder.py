@@ -6,15 +6,26 @@ from recsys.entity.config_entity import ListBuilderConfig, get_ingestion_config,
 from recsys.exception import RecsysException
 from recsys.logger import logger
 
-# The non-model inputs of the frozen system, moved UNCHANGED from notebook 08 Step 4b.
+# The non-model inputs of the frozen system, moved from notebook 08 Step 4b.
 # Plain functions (not methods), so tests can call them directly on tiny hand-made tables.
+# Day 14 Step 0, TIE RULE (chosen before measuring, arbitrary on purpose so it can't be tuning):
+#   same date -> smaller article_id first;  same count -> smaller article_id first.
+#   Before this, ties were ordered by row position in the file: new data in a new order could change the lists.
+# This file is the ONLY copy: notebooks 07, 08 and 09 import these functions.
+
+
+def top_articles(article_ids, k):
+    """The k most bought articles, most first; equal counts -> smaller article_id first."""
+    counts = article_ids.value_counts().rename_axis('article_id').reset_index(name='count')
+    counts = counts.sort_values(['count', 'article_id'], ascending=[False, True])
+    return counts['article_id'].head(k).to_list()
 
 
 def repurchase_lists(history, max_items):
-    """{customer: [own articles, newest first, each once, at most max_items]}"""
+    """{customer: [own articles, newest first, each once, at most max_items]}; same date -> smaller article_id first"""
     sorted_history = history.sort_values(
-        't_dat',
-        ascending=False
+        ['t_dat', 'article_id'],
+        ascending=[False, True]
     )
     unique_articles = sorted_history.drop_duplicates(          # newest copy of each article survives
         subset=['customer_join_idx', 'article_id'],
@@ -30,13 +41,7 @@ def repurchase_lists(history, max_items):
 
 def last_week_top(history, week, k):
     """The k best sellers of one week, most bought first."""
-    return (
-        history[history['week'] == week]['article_id']
-        .value_counts()
-        .head(k)
-        .index
-        .to_list()
-    )
+    return top_articles(history[history['week'] == week]['article_id'], k)
 
 
 def age_to_bucket(ages, edges):
@@ -64,11 +69,11 @@ def age_bucket_top10(history, customers, week, edges, k):
     for bucket in sorted(week_rows["age_bucket"].unique()):
         if bucket == 0:
             continue
-        lists[int(bucket)] = week_rows[week_rows["age_bucket"] == bucket]['article_id'].value_counts().head(k).index.to_list()
+        lists[int(bucket)] = top_articles(week_rows[week_rows["age_bucket"] == bucket]['article_id'], k)
     return lists
 
 
-def fill_up(my_list, fallback, k):
+def fill_up(my_list, fallback, k=10):
     """Add fallback articles (skipping ones already in my_list) until the list has k articles."""
     filled = list(my_list)
     for article in fallback:

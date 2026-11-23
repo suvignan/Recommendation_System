@@ -8,6 +8,8 @@ artifacts/
 models/
 results/
 logs/
+# local MLflow runs (used when MLFLOW_TRACKING_URI is not set)
+mlruns/
 
 # pip install -e .
 *.egg-info/

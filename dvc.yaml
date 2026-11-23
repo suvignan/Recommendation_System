@@ -1,0 +1,155 @@
+# The weekly pipeline as DVC stages: `dvc repro` reruns only the stages whose inputs changed.
+# Each stage is a separate command that reads its inputs from files (Step 5), so DVC can see what it depends on.
+#
+# deps   = input files AND the code files whose logic the stage runs (DVC compares contents: even a comment counts).
+#          Shared plumbing (entity/, utils/common.py, pipeline/) is left out on purpose: it moves paths around,
+#          it doesn't decide what the outputs contain.
+# params = only the params.yaml keys the stage actually reads (see the get_*_config functions).
+# outs   = the stage's folder, including its artifact.json receipt for the next stage.
+#
+# The history weeks (9 = evaluation, 11 = serving) are written into the commands and paths below; if
+# params.yaml's `lists` weeks ever change, change them here too (a mismatch fails loudly: missing artifact file).
+
+stages:
+  ingest:
+    cmd: python -m recsys.pipeline.run --stage ingest
+    deps:
+      - data/RAW/transactions_train.parquet
+      - data/RAW/customers.parquet
+      - data/RAW/articles.parquet
+      - config/schema.yaml
+      - src/recsys/components/data_ingestion.py
+    params:
+      - window
+      - dedup
+      - expected_rows.window
+      - expected_rows.after_dedup
+    outs:
+      - artifacts/data_ingestion
+
+  validate:
+    cmd: python -m recsys.pipeline.run --stage validate
+    deps:
+      - artifacts/data_ingestion
+      - config/schema.yaml
+      - src/recsys/components/data_validation.py
+    params:
+      - window
+      - dedup
+      - expected_rows.after_dedup
+    outs:
+      - artifacts/data_validation         # artifact.json exists only if all checks passed
+
+  split:
+    cmd: python -m recsys.pipeline.run --stage split
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/data_validation/artifact.json
+      - src/recsys/components/data_splitter.py
+    params:
+      - split
+      - expected_rows.train
+      - expected_rows.val
+      - expected_rows.test
+    outs:
+      - artifacts/data_splitter
+
+  lists_eval:
+    cmd: python -m recsys.pipeline.run --stage lists --history-end-week 9
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/data_validation/artifact.json
+      - src/recsys/components/list_builder.py
+    params:
+      - recommend.k
+      - recommend.repurchase_max
+      - recommend.filler_candidates
+      - features.age_edges
+    outs:
+      - artifacts/list_builder/history_to_week_9
+
+  train_eval:
+    cmd: python -m recsys.pipeline.run --stage train --history-end-week 9
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/data_validation/artifact.json
+      - src/recsys/components/model_trainer.py
+    params:
+      - als.factors
+      - als.iterations
+      - als.regularization
+      - als.alpha
+      - als.random_state
+    outs:
+      - artifacts/model_trainer/w09
+
+  evaluate:                               # THE GATE: raises (stage fails, repro stops) if a gate check fails
+    cmd: python -m recsys.pipeline.run --stage evaluate
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/data_splitter
+      - artifacts/list_builder/history_to_week_9
+      - artifacts/model_trainer/w09
+      - src/recsys/components/model_evaluation.py
+      - src/recsys/components/list_builder.py
+      - src/recsys/utils/metrics.py
+    params:
+      - lists
+      - recommend.k
+      - recommend.filler_candidates
+      - features.age_edges
+      - gate
+    outs:
+      - artifacts/model_evaluation        # report_w09.json + artifact.json (the pass receipt, written only on a pass)
+
+  # ---- the serving branch: same components, history up to week 11. Each depends on the pass receipt, so it can
+  #      only run after a passed gate (and the code refuses too: require_gate()).
+  lists_serve:
+    cmd: python -m recsys.pipeline.run --stage lists --history-end-week 11
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/model_evaluation/artifact.json
+      - src/recsys/components/list_builder.py
+    params:
+      - recommend.k
+      - recommend.repurchase_max
+      - recommend.filler_candidates
+      - features.age_edges
+    outs:
+      - artifacts/list_builder/history_to_week_11
+
+  train_serve:
+    cmd: python -m recsys.pipeline.run --stage train --history-end-week 11
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/model_evaluation/artifact.json
+      - src/recsys/components/model_trainer.py
+    params:
+      - als.factors
+      - als.iterations
+      - als.regularization
+      - als.alpha
+      - als.random_state
+    outs:
+      - artifacts/model_trainer/w11
+
+  table:
+    cmd: python -m recsys.pipeline.run --stage table
+    deps:
+      - artifacts/data_ingestion
+      - artifacts/model_evaluation/artifact.json    # the pass receipt, not the report: see the note below
+      - artifacts/list_builder/history_to_week_11
+      - artifacts/model_trainer/w11
+      - src/recsys/components/recommendation_table.py
+      - src/recsys/components/model_evaluation.py
+      - src/recsys/components/list_builder.py
+    params:
+      - recommend.k
+      - recommend.filler_candidates
+      - features.age_edges
+    outs:
+      - artifacts/recommendation_table
+
+# Why the serving stages depend on artifact.json and not report_w09.json: the report's text changes whenever the
+# gate SETTINGS change (e.g. "need >= 2.1x"), which would rebuild a table that can't differ. The receipt only
+# changes when the result does (recall, NDCG, pass/fail), and it doesn't exist at all after a failed gate.

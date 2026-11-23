@@ -13,3 +13,6 @@ INGESTION_DIR = ARTIFACT_DIR / "data_ingestion"
 VALIDATION_DIR = ARTIFACT_DIR / "data_validation"
 SPLIT_DIR = ARTIFACT_DIR / "data_splitter"
 LISTS_DIR = ARTIFACT_DIR / "list_builder"          # one subfolder per history_end_week (evaluation vs serving)
+MODEL_TRAINER_DIR = ARTIFACT_DIR / "model_trainer"
+MODEL_EVALUATION_DIR = ARTIFACT_DIR / "model_evaluation"
+RECOMMENDATION_TABLE_DIR = ARTIFACT_DIR / "recommendation_table"   # what the API serves (built from the serving history)

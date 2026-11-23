@@ -1,0 +1,354 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python -m recsys.pipeline.run --stage ingest
+    deps:
+    - path: config/schema.yaml
+      hash: md5
+      md5: 63018371122b6cc2deafbf741076f900
+      size: 2020
+    - path: data/RAW/articles.parquet
+      hash: md5
+      md5: 38855f55330c613119eb8fd2298a6caf
+      size: 6445714
+    - path: data/RAW/customers.parquet
+      hash: md5
+      md5: 2c4d07489d5963ab3d6cb0b2cc4097f9
+      size: 167680276
+    - path: data/RAW/transactions_train.parquet
+      hash: md5
+      md5: 7bfce75c77f3ec5a88c49d1ca57a7cf8
+      size: 778112710
+    - path: src/recsys/components/data_ingestion.py
+      hash: md5
+      md5: 6f9fc0995f1141f2fad7ae8a30638cd7
+      size: 7094
+    params:
+      params.yaml:
+        dedup:
+          key_columns:
+          - t_dat
+          - customer_join_idx
+          - article_id
+        expected_rows.after_dedup: 3085875
+        expected_rows.window: 3386963
+        window:
+          weeks: 12
+          start_date: '2020-07-01'
+    outs:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+  validate:
+    cmd: python -m recsys.pipeline.run --stage validate
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: config/schema.yaml
+      hash: md5
+      md5: 63018371122b6cc2deafbf741076f900
+      size: 2020
+    - path: src/recsys/components/data_validation.py
+      hash: md5
+      md5: 8073f203734a5de1aaefcea1cdbaa2ce
+      size: 9710
+    params:
+      params.yaml:
+        dedup:
+          key_columns:
+          - t_dat
+          - customer_join_idx
+          - article_id
+        expected_rows.after_dedup: 3085875
+        window:
+          weeks: 12
+          start_date: '2020-07-01'
+    outs:
+    - path: artifacts/data_validation
+      hash: md5
+      md5: d5db8ef46f2842a7e9cb1a2a106a60ba.dir
+      size: 2045
+      nfiles: 2
+  split:
+    cmd: python -m recsys.pipeline.run --stage split
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/data_validation/artifact.json
+      hash: md5
+      md5: 801047d9d44caa382defb7be35d69aab
+      size: 92
+    - path: src/recsys/components/data_splitter.py
+      hash: md5
+      md5: d00e7655287f40d2d88f6d1a148b1380
+      size: 3209
+    params:
+      params.yaml:
+        expected_rows.test: 216792
+        expected_rows.train: 2638103
+        expected_rows.val: 230980
+        split:
+          train_weeks:
+          - 0
+          - 9
+          val_week: 10
+          test_week: 11
+    outs:
+    - path: artifacts/data_splitter
+      hash: md5
+      md5: cd9de9d8f39ad2f538b162f1f2cdf653.dir
+      size: 19315059
+      nfiles: 4
+  lists_eval:
+    cmd: python -m recsys.pipeline.run --stage lists --history-end-week 9
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/data_validation/artifact.json
+      hash: md5
+      md5: 801047d9d44caa382defb7be35d69aab
+      size: 92
+    - path: src/recsys/components/list_builder.py
+      hash: md5
+      md5: 687b09be5a925e66bc9dbf6464d47215
+      size: 7280
+    params:
+      params.yaml:
+        features.age_edges:
+        - 16
+        - 20
+        - 25
+        - 30
+        - 40
+        - 50
+        - 60
+        - 100
+        recommend.filler_candidates: 30
+        recommend.k: 10
+        recommend.repurchase_max: 10
+    outs:
+    - path: artifacts/list_builder/history_to_week_9
+      hash: md5
+      md5: a9fc16d34caaa52d192a96ceaa98eef4.dir
+      size: 9895270
+      nfiles: 4
+  train_eval:
+    cmd: python -m recsys.pipeline.run --stage train --history-end-week 9
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/data_validation/artifact.json
+      hash: md5
+      md5: 801047d9d44caa382defb7be35d69aab
+      size: 92
+    - path: src/recsys/components/model_trainer.py
+      hash: md5
+      md5: 6010c999c464ab0b0e1f1127d00778dc
+      size: 4967
+    params:
+      params.yaml:
+        als.alpha: 40
+        als.factors: 64
+        als.iterations: 15
+        als.random_state: 42
+        als.regularization: 0.05
+    outs:
+    - path: artifacts/model_trainer/w09
+      hash: md5
+      md5: 46fc8d2620dbece43dd86b10780ff253.dir
+      size: 128518582
+      nfiles: 6
+  evaluate:
+    cmd: python -m recsys.pipeline.run --stage evaluate
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/data_splitter
+      hash: md5
+      md5: cd9de9d8f39ad2f538b162f1f2cdf653.dir
+      size: 19315059
+      nfiles: 4
+    - path: artifacts/list_builder/history_to_week_9
+      hash: md5
+      md5: a9fc16d34caaa52d192a96ceaa98eef4.dir
+      size: 9895270
+      nfiles: 4
+    - path: artifacts/model_trainer/w09
+      hash: md5
+      md5: 46fc8d2620dbece43dd86b10780ff253.dir
+      size: 128518582
+      nfiles: 6
+    - path: src/recsys/components/list_builder.py
+      hash: md5
+      md5: 687b09be5a925e66bc9dbf6464d47215
+      size: 7280
+    - path: src/recsys/components/model_evaluation.py
+      hash: md5
+      md5: f95d2d9c23b96f230159c5c1192848a7
+      size: 10875
+    - path: src/recsys/utils/metrics.py
+      hash: md5
+      md5: f9bbd29b5b8079498c89da7e1fa998b9
+      size: 1604
+    params:
+      params.yaml:
+        features.age_edges:
+        - 16
+        - 20
+        - 25
+        - 30
+        - 40
+        - 50
+        - 60
+        - 100
+        gate:
+          reference_recall: 0.04949648088361298
+          reference_tolerance: 1e-06
+          min_lift_over_popularity: 2.0
+          cold_must_beat_popularity: true
+        lists:
+          evaluation_history_end_week: 9
+          serving_history_end_week: 11
+        recommend.filler_candidates: 30
+        recommend.k: 10
+    outs:
+    - path: artifacts/model_evaluation
+      hash: md5
+      md5: d788d807045b10b102acc137171e223c.dir
+      size: 2054
+      nfiles: 3
+  lists_serve:
+    cmd: python -m recsys.pipeline.run --stage lists --history-end-week 11
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/model_evaluation/artifact.json
+      hash: md5
+      md5: 04f62e6b518ae4eefbd47f45759fe436
+      size: 166
+    - path: src/recsys/components/list_builder.py
+      hash: md5
+      md5: 687b09be5a925e66bc9dbf6464d47215
+      size: 7280
+    params:
+      params.yaml:
+        features.age_edges:
+        - 16
+        - 20
+        - 25
+        - 30
+        - 40
+        - 50
+        - 60
+        - 100
+        recommend.filler_candidates: 30
+        recommend.k: 10
+        recommend.repurchase_max: 10
+    outs:
+    - path: artifacts/list_builder/history_to_week_11
+      hash: md5
+      md5: 137f0394f66b5230f5175aedddc50a2d.dir
+      size: 11099754
+      nfiles: 4
+  train_serve:
+    cmd: python -m recsys.pipeline.run --stage train --history-end-week 11
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/model_evaluation/artifact.json
+      hash: md5
+      md5: 04f62e6b518ae4eefbd47f45759fe436
+      size: 166
+    - path: src/recsys/components/model_trainer.py
+      hash: md5
+      md5: 6010c999c464ab0b0e1f1127d00778dc
+      size: 4967
+    params:
+      params.yaml:
+        als.alpha: 40
+        als.factors: 64
+        als.iterations: 15
+        als.random_state: 42
+        als.regularization: 0.05
+    outs:
+    - path: artifacts/model_trainer/w11
+      hash: md5
+      md5: 3be96dc2b2c8694f7a3de7b7748fbc96.dir
+      size: 141012640
+      nfiles: 6
+  table:
+    cmd: python -m recsys.pipeline.run --stage table
+    deps:
+    - path: artifacts/data_ingestion
+      hash: md5
+      md5: c74fcc910483daf1605f5287faca7d77.dir
+      size: 282388040
+      nfiles: 5
+    - path: artifacts/list_builder/history_to_week_11
+      hash: md5
+      md5: 137f0394f66b5230f5175aedddc50a2d.dir
+      size: 11099754
+      nfiles: 4
+    - path: artifacts/model_evaluation/artifact.json
+      hash: md5
+      md5: 04f62e6b518ae4eefbd47f45759fe436
+      size: 166
+    - path: artifacts/model_trainer/w11
+      hash: md5
+      md5: 3be96dc2b2c8694f7a3de7b7748fbc96.dir
+      size: 141012640
+      nfiles: 6
+    - path: src/recsys/components/list_builder.py
+      hash: md5
+      md5: 687b09be5a925e66bc9dbf6464d47215
+      size: 7280
+    - path: src/recsys/components/model_evaluation.py
+      hash: md5
+      md5: f95d2d9c23b96f230159c5c1192848a7
+      size: 10875
+    - path: src/recsys/components/recommendation_table.py
+      hash: md5
+      md5: dc06a1005f76197bf30da9f91f445992
+      size: 5209
+    params:
+      params.yaml:
+        features.age_edges:
+        - 16
+        - 20
+        - 25
+        - 30
+        - 40
+        - 50
+        - 60
+        - 100
+        recommend.filler_candidates: 30
+        recommend.k: 10
+    outs:
+    - path: artifacts/recommendation_table
+      hash: md5
+      md5: 1e958d06629675be919b79e6df35cba2.dir
+      size: 103074270
+      nfiles: 4

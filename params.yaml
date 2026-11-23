@@ -43,3 +43,20 @@ recommend:
   k: 10                         # Day 6: recall@10 / NDCG@10, 10 articles per customer
   repurchase_max: 10            # Day 8: own purchases, newest first, each once, at most 10
   filler_candidates: 30         # Day 10: ask the filler for 30 so lists never come up short after skipping own articles
+
+gate:                           # Day 14 Step 3: the rule that decides if a build may be served, written BEFORE coding it
+  # 1. Sanity (always): every list has exactly k distinct articles, none missing.
+  # 2. Snapshot parity (only when reference_recall is not null): recall all == reference within the tolerance.
+  #    Reference = the re-validated champion after the Day 14 Step 0 tie rule (was 0.0495 with file-order ties).
+  #    Set it to null in a live weekly run: new data gives a new recall, so a fixed number means nothing there.
+  reference_recall: 0.04949648088361298
+  reference_tolerance: 1.0e-6
+  # 3. Live gate (always): compared with last-week popularity on the SAME customers in the SAME run, so a quiet or
+  #    easy week moves both numbers together.
+  #    Why 2.0: the system was 2.69x popularity on validation and 2.29x on test, so normal week-to-week variation
+  #    (-15% between those two weeks) still clears 2.0 with room. Without its strongest part (repurchase), ALS +
+  #    popularity was only 1.78x (validation) and 1.55x (test), so losing that part fails the gate.
+  #    Known limit: a broken ALS filler alone would NOT fail it (repurchase + popularity fill was 2.48x); in the
+  #    snapshot the parity check catches that.
+  min_lift_over_popularity: 2.0
+  cold_must_beat_popularity: true   # cold recall >= popularity's cold recall (validation 0.0216 vs 0.0194)

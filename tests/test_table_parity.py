@@ -18,10 +18,14 @@ TABLE = ROOT / "artifacts" / "recommendation_table"
 INGESTION = ROOT / "artifacts" / "data_ingestion"
 TRAINER = ROOT / "artifacts" / "model_trainer" / "w11"
 
+pytestmark = [
+    pytest.mark.data,
+    pytest.mark.skipif(not ((TABLE / "recommendations.parquet").exists() and (TRAINER / "user_factors.npy").exists()),
+                       reason="needs the real table and serving ALS: run `python main.py` or `dvc pull`"),
+]
+
 
 def test_served_lists_equal_live_recipe():
-    if not (TABLE / "recommendations.parquet").exists() or not (TRAINER / "user_factors.npy").exists():
-        pytest.skip("run `python main.py` first")
     params = read_yaml(ROOT / "params.yaml")
     k, filler = params["recommend"]["k"], params["recommend"]["filler_candidates"]
     edges = params["features"]["age_edges"]

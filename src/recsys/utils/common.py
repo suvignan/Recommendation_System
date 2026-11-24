@@ -36,13 +36,15 @@ def save_artifact(artifact, path) -> None:
     data = {}
     for name, value in dataclasses.asdict(artifact).items():
         if isinstance(value, Path):
-            value = value.resolve().relative_to(constants.ROOT).as_posix()
+            value = value.resolve()
+            value = value.relative_to(constants.ROOT).as_posix() if value.is_relative_to(constants.ROOT) else value.as_posix()
         data[name] = value
     save_json(data, path)
 
 
 def load_artifact(artifact_class, path):
-    """JSON written by save_artifact -> the artifact dataclass (fields ending in _path become absolute Paths again)."""
+    """JSON written by save_artifact -> the artifact dataclass (fields ending in _path become absolute Paths again;
+    ROOT / an absolute path is just that absolute path)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     for name in data:
         if name.endswith("_path") and data[name] is not None:

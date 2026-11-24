@@ -1,0 +1,11 @@
+# The API (Day 16) and its Docker image ONLY. The API reads the finished weekly table (three Parquet files) and
+# looks lists up; it never trains, scores or tracks anything.
+# NOT here: implicit, scipy (training), dvc (data versioning), mlflow (tracking), PyYAML (pipeline config),
+# tensorflow (notebooks). Fewer packages = a smaller image and fewer packages that can carry vulnerabilities.
+# pandas / pyarrow / numpy use the SAME pins as the pipeline, so the API reads the Parquet files exactly as they
+# were written. fastapi / uvicorn: latest at the time of writing; installed and tested on Day 16.
+fastapi==0.165.0
+uvicorn==0.54.0
+pandas==3.0.6
+pyarrow==26.0.0
+numpy==2.5.4

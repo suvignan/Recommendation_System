@@ -1,0 +1,33 @@
+# CI: on every push and pull request, install the pipeline and run every test that doesn't need the real 1 GB data.
+# The real-data tests are marked `data` and skip here; the committed 15 KB fixture runs all 9 stages instead.
+# No secrets: nothing here talks to DagsHub or MLflow (the smoke test sets RECSYS_TRACKING=off).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20              # a hung run fails instead of burning minutes
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python (same version as local)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip                 # keyed on requirements.txt: unchanged pins = no re-download
+          cache-dependency-path: requirements.txt
+
+      - name: Install the pipeline
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run tests (no real data in CI)
+        run: pytest -m "not data" -v

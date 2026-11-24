@@ -201,8 +201,8 @@ stages:
       size: 7280
     - path: src/recsys/components/model_evaluation.py
       hash: md5
-      md5: f95d2d9c23b96f230159c5c1192848a7
-      size: 10875
+      md5: 686dbd002371dd8ae0f2b9168564b44f
+      size: 11406
     - path: src/recsys/utils/metrics.py
       hash: md5
       md5: f9bbd29b5b8079498c89da7e1fa998b9
@@ -231,9 +231,9 @@ stages:
     outs:
     - path: artifacts/model_evaluation
       hash: md5
-      md5: d788d807045b10b102acc137171e223c.dir
-      size: 2054
-      nfiles: 3
+      md5: 7d13921d72e5be46d5db9fc2f5da9841.dir
+      size: 1919
+      nfiles: 2
   lists_serve:
     cmd: python -m recsys.pipeline.run --stage lists --history-end-week 11
     deps:
@@ -327,8 +327,8 @@ stages:
       size: 7280
     - path: src/recsys/components/model_evaluation.py
       hash: md5
-      md5: f95d2d9c23b96f230159c5c1192848a7
-      size: 10875
+      md5: 686dbd002371dd8ae0f2b9168564b44f
+      size: 11406
     - path: src/recsys/components/recommendation_table.py
       hash: md5
       md5: dc06a1005f76197bf30da9f91f445992

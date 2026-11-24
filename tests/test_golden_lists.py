@@ -12,11 +12,15 @@ import pytest
 GOLDEN = Path(__file__).parent / "golden"
 PIPELINE = Path(__file__).parents[1] / "artifacts" / "list_builder" / "history_to_week_9"
 
+pytestmark = [
+    pytest.mark.data,
+    pytest.mark.skipif(not (PIPELINE / "repurchase.parquet").exists(),
+                       reason="needs the real pipeline output: run `python main.py` or `dvc pull`"),
+]
+
 
 def compare(pipeline_file, golden_file, sort_by):
     pipeline_path = PIPELINE / pipeline_file
-    if not pipeline_path.exists():
-        pytest.skip(f"{pipeline_path} not found: run `python main.py` first")
     # Sort by key + RANK (never by article): sorting by article would hide an ORDER difference, which NDCG cares about
     mine = pd.read_parquet(pipeline_path).sort_values(sort_by).reset_index(drop=True)
     golden = pd.read_parquet(GOLDEN / golden_file).sort_values(sort_by).reset_index(drop=True)

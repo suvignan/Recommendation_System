@@ -38,6 +38,7 @@ def als_recommend(customer_ids, k, user_factors, item_factors, customer_map, col
     top_columns = []
     for start in range(0, len(rows), 2000):                                   # 2,000 customers at a time: memory
         chunk_scores = user_factors[rows[start:start + 2000]] @ item_factors.T
+        chunk_scores[:, 0] = -np.inf          # column 0 = 'unknown', no real article: never recommend it (Day 15)
         top = np.argpartition(-chunk_scores, k, axis=1)[:, :k]                # the k best, unordered (fast)
         order = np.take_along_axis(chunk_scores, top, axis=1).argsort(axis=1)[:, ::-1]   # sort only those k
         top_columns.append(np.take_along_axis(top, order, axis=1))
@@ -84,7 +85,8 @@ def gate_checks(final, popularity, bad_lists, reference_recall, reference_tolera
                f"recall {final['all']['recall']} vs reference {reference_recall}: difference {difference:.2e} "
                f"(tolerance {reference_tolerance:.0e})")
 
-    lift = final['all']['recall'] / popularity['all']['recall']
+    # On tiny data (the smoke-test fixture) popularity can score exactly 0: no division by zero
+    lift = final['all']['recall'] / popularity['all']['recall'] if popularity['all']['recall'] > 0 else float('inf')
     record('live gate: lift over popularity', lift >= min_lift_over_popularity,
            f"{final['all']['recall']:.4f} / {popularity['all']['recall']:.4f} = {lift:.2f}x (need >= {min_lift_over_popularity}x)")
 
@@ -152,7 +154,8 @@ class ModelEvaluation:
             warm_rows = ~is_cold
             popularity_fill = [fill_up(own_lists[customer], last_week, c.k) for customer in warm_ids]
             popularity_fill_recall, _ = score(popularity_fill, answer_key[warm_rows].to_list(), c.k)
-            filler_gain = final['warm']['recall'] / popularity_fill_recall.mean()
+            baseline = popularity_fill_recall.mean()
+            filler_gain = final['warm']['recall'] / baseline if baseline > 0 else float('inf')
             warnings = [{
                 'check': 'ALS filler beats popularity filler (warm customers)',
                 'flagged': bool(filler_gain < 1.0),

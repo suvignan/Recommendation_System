@@ -42,8 +42,15 @@ def git_commit():
         return "unknown", True
 
 
+def tracking_off():
+    """RECSYS_TRACKING=off: no MLflow at all (the smoke test and CI: no credentials, no network)."""
+    return os.environ.get("RECSYS_TRACKING", "").lower() == "off"
+
+
 def log_evaluation(report_path, serving_week):
     """Log params, metrics, tags and the report. Called after the evaluation stage, pass OR fail."""
+    if tracking_off():
+        return
     try:
         uri = connect()
         report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -77,6 +84,8 @@ def log_evaluation(report_path, serving_week):
 
 def log_table(artifact_json_path):
     """Add the table's checksum file (its artifact JSON) to the evaluation stage's run."""
+    if tracking_off():
+        return
     try:
         connect()
         run_id = json.loads(RUN_FILE.read_text(encoding="utf-8"))["run_id"]

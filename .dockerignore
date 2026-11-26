@@ -1,0 +1,28 @@
+# Everything Docker must NOT send into the image. Above all: secrets.
+.env
+.env.*
+.dvc/config.local
+
+# Data and caches: GBs the API never reads
+data/
+Data/
+.dvc/cache/
+mlruns/
+logs/
+models/
+results/
+
+# Pipeline outputs: only artifacts/recommendation_table/serving/ is needed (the ! keeps it)
+artifacts/*
+!artifacts/recommendation_table/
+artifacts/recommendation_table/*
+!artifacts/recommendation_table/serving/
+
+# Not needed to serve
+notebooks/
+tests/
+.git/
+.github/
+.venv/
+**/__pycache__/
+*.egg-info/

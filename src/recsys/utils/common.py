@@ -1,11 +1,10 @@
-import dataclasses
-import hashlib
 import json
 from pathlib import Path
 
 import yaml
 
 from recsys import constants
+from recsys.utils.shared import sha256_of  # noqa: F401  (one copy, shared with the API)
 
 
 def read_yaml(path) -> dict:
@@ -21,32 +20,30 @@ def save_json(data: dict, path) -> None:
     path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
 
 
-def sha256_of(path) -> str:
-    """The file's fingerprint (64 hex characters): change one byte and it changes completely. Read in 1 MB chunks."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def path_to_text(path) -> str:
+    """A path as text for a JSON file. Inside the project -> 'artifacts/...' (still right after a fresh clone in
+    another folder). Outside the project (a test's temp folder) -> the full path."""
+    path = Path(path).resolve()
+    try:
+        return path.relative_to(constants.ROOT).as_posix()
+    except ValueError:                           # relative_to raises ValueError when path is not inside ROOT
+        return path.as_posix()
 
 
 def save_artifact(artifact, path) -> None:
-    """A stage's artifact (dataclass) -> JSON, so the NEXT stage can run as a separate command (DVC).
-    Paths are saved RELATIVE to the project root, so the file still works after a fresh clone + dvc pull elsewhere."""
+    """Save a stage's artifact (its receipt) as JSON, so the NEXT stage can run as a separate command (DVC)."""
     data = {}
-    for name, value in dataclasses.asdict(artifact).items():
+    for name, value in vars(artifact).items():   # vars() gives the dataclass fields as {name: value}
         if isinstance(value, Path):
-            value = value.resolve()
-            value = value.relative_to(constants.ROOT).as_posix() if value.is_relative_to(constants.ROOT) else value.as_posix()
+            value = path_to_text(value)
         data[name] = value
     save_json(data, path)
 
 
 def load_artifact(artifact_class, path):
-    """JSON written by save_artifact -> the artifact dataclass (fields ending in _path become absolute Paths again;
-    ROOT / an absolute path is just that absolute path)."""
+    """Read a JSON written by save_artifact back into the artifact class (text paths become Paths again)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    for name in data:
-        if name.endswith("_path") and data[name] is not None:
-            data[name] = constants.ROOT / data[name]
+    for name, value in data.items():
+        if name.endswith("_path"):
+            data[name] = constants.ROOT / value  # ROOT / a full path = that full path, so both kinds work
     return artifact_class(**data)

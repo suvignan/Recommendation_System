@@ -141,6 +141,7 @@ stages:
       - artifacts/list_builder/history_to_week_11
       - artifacts/model_trainer/w11
       - src/recsys/components/recommendation_table.py
+      - src/recsys/utils/shared.py
       - src/recsys/components/model_evaluation.py
       - src/recsys/components/list_builder.py
     params:
@@ -148,7 +149,7 @@ stages:
       - recommend.filler_candidates
       - features.age_edges
     outs:
-      - artifacts/recommendation_table
+      - artifacts/recommendation_table        # long Parquet + serving/ (the .npy files the API loads)
 
 # Why the serving stages depend on artifact.json and not report_w09.json: the report's text changes whenever the
 # gate SETTINGS change (e.g. "need >= 2.1x"), which would rebuild a table that can't differ. The receipt only

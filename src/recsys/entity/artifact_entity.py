@@ -64,6 +64,8 @@ class RecommendationTableArtifact:
     recommendations_path: Path       # long format: customer_join_idx, rank, article_id; every customer with history
     bucket_lists_path: Path          # long format: age_bucket, rank, article_id; bucket 0 = unknown age = global list
     customer_lookup_path: Path       # customer_id -> customer_join_idx, age_bucket, has_history (ALL known customers)
+    serving_manifest_path: Path      # serving/serving_manifest.json: the .npy files the API loads + their SHA-256s
+    table_version: str               # one checksum over all serving files (the API reports it)
     history_end_week: int            # 11: the lists are for the week AFTER the data ends
     n_customers_with_lists: int
     n_recommendation_rows: int
@@ -71,3 +73,4 @@ class RecommendationTableArtifact:
     recommendations_sha256: str      # the API checks these at startup: never serve a half-written or mismatched file
     bucket_lists_sha256: str
     customer_lookup_sha256: str
+

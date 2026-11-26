@@ -250,3 +250,4 @@ def get_table_config(ingestion_artifact: DataIngestionArtifact, evaluation_artif
         age_edges=tuple(params["features"]["age_edges"]),
         output_dir=constants.RECOMMENDATION_TABLE_DIR,
     )
+

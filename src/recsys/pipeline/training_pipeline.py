@@ -115,6 +115,7 @@ def table():
     tracking.log_table(artifact_file("table"))
 
 
+
 STAGES = {
     "ingest": ingest,
     "validate": validate,

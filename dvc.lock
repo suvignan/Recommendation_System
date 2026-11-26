@@ -55,8 +55,8 @@ stages:
       size: 2020
     - path: src/recsys/components/data_validation.py
       hash: md5
-      md5: 8073f203734a5de1aaefcea1cdbaa2ce
-      size: 9710
+      md5: 0da8b6c90defc952584081a7c371f285
+      size: 9955
     params:
       params.yaml:
         dedup:
@@ -331,8 +331,12 @@ stages:
       size: 11406
     - path: src/recsys/components/recommendation_table.py
       hash: md5
-      md5: dc06a1005f76197bf30da9f91f445992
-      size: 5209
+      md5: e83f9673ee6c81b661e45a276edca3a7
+      size: 10712
+    - path: src/recsys/utils/shared.py
+      hash: md5
+      md5: 045bbf614762a5fcbdb36ff9cb026838
+      size: 1499
     params:
       params.yaml:
         features.age_edges:
@@ -349,6 +353,31 @@ stages:
     outs:
     - path: artifacts/recommendation_table
       hash: md5
+      md5: 5a9cdcfdd7a18a809d955b8c7f53022b.dir
+      size: 140494407
+      nfiles: 10
+  serve_export:
+    cmd: python -m recsys.pipeline.run --stage export
+    deps:
+    - path: artifacts/recommendation_table
+      hash: md5
       md5: 1e958d06629675be919b79e6df35cba2.dir
       size: 103074270
       nfiles: 4
+    - path: src/recsys/components/serving_export.py
+      hash: md5
+      md5: 34535580b3f006997acfb585e3e76c27
+      size: 6872
+    - path: src/recsys/utils/ids.py
+      hash: md5
+      md5: c9176e0607d4998c479a78c589633c85
+      size: 578
+    params:
+      params.yaml:
+        recommend.k: 10
+    outs:
+    - path: artifacts/serving
+      hash: md5
+      md5: 9ac184932541df4725e50c061482851f.dir
+      size: 37420068
+      nfiles: 7

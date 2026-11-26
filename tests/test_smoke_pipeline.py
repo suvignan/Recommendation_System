@@ -1,12 +1,9 @@
-"""Day 15 end-to-end smoke test: ALL 9 stages on the tiny committed fixture, in tmp_path, with MLflow off.
+"""Day 15 smoke test: the WHOLE pipeline on the tiny committed fixture (tests/fixtures), with MLflow off.
 
-It checks the PLUMBING (every stage runs and hands correct files to the next), not quality (see params_fixture.yaml).
-Runs `python main.py` in a subprocess: the same entry point as a real run, with the paths redirected by env vars.
+The run itself happens once in conftest.py (`fixture_run`); these tests check what it produced.
+It checks the PLUMBING (every stage runs and hands correct files to the next), not quality.
 """
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -15,62 +12,62 @@ import pyarrow.parquet as pq
 
 from recsys.utils.common import sha256_of
 
-ROOT = Path(__file__).parents[1]
-FIXTURE = ROOT / "tests" / "fixtures"
+FIXTURE = Path(__file__).parent / "fixtures"
 
 
-def run_pipeline(tmp_path, raw_dir):
-    env = {
-        **os.environ,
-        "RECSYS_RAW_DIR": str(raw_dir),
-        "RECSYS_PARAMS_FILE": str(FIXTURE / "params_fixture.yaml"),
-        "RECSYS_ARTIFACT_DIR": str(tmp_path / "artifacts"),
-        "RECSYS_TRACKING": "off",                         # no MLflow: no credentials, no network
-    }
-    result = subprocess.run([sys.executable, "main.py"], cwd=ROOT, env=env, capture_output=True,
-                            text=True, encoding="utf-8", errors="replace", timeout=300)
-    return result, tmp_path / "artifacts"
+def read_json(path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def test_all_nine_stages_run_on_the_fixture(tmp_path):
-    result, artifacts = run_pipeline(tmp_path, FIXTURE / "raw")
-    assert result.returncode == 0, result.stderr[-3000:]
+def test_all_stages_run_on_the_fixture(fixture_run):
+    output = fixture_run
 
-    # The table: every customer with history (fixture customers 0-19) has exactly 10 distinct real articles
-    table = pd.read_parquet(artifacts / "recommendation_table" / "recommendations.parquet")
-    per_customer = table.groupby("customer_join_idx")["article_id"].agg(["size", "nunique"])
-    assert len(per_customer) == 20
-    assert (per_customer["size"] == 10).all() and (per_customer["nunique"] == 10).all()
+    # 1. The table: 20 customers with history (fixture customers 0-19), each with 10 different real articles
+    table = pd.read_parquet(output / "recommendation_table" / "recommendations.parquet")
     real_articles = set(pd.read_parquet(FIXTURE / "raw" / "articles.parquet")["article_id"])
-    assert set(table["article_id"]) <= real_articles                 # e.g. never ALS's empty column 0
-    assert len(pd.read_parquet(artifacts / "recommendation_table" / "customer_lookup.parquet")) == 24
+    lists = table.groupby("customer_join_idx")["article_id"].apply(list)
+    assert len(lists) == 20
+    for articles in lists:
+        assert len(articles) == 10
+        assert len(set(articles)) == 10                                           # no article twice
+        assert set(articles) <= real_articles                                     # never ALS's empty column 0
+    assert len(pd.read_parquet(output / "recommendation_table" / "customer_lookup.parquet")) == 24
 
-    # The gate report exists and passed
-    report = json.loads((artifacts / "model_evaluation" / "report_w09.json").read_text(encoding="utf-8"))
+    # 2. The gate report exists, it passed, and the cold path really ran
+    report = read_json(output / "model_evaluation" / "report_w09.json")
     assert report["gate"]["passed"] is True
-    assert report["customers"]["cold"] > 0                          # the cold path really ran
+    assert report["customers"]["cold"] > 0
 
-    # The checksums in the table's artifact JSON match the files on disk
-    manifest = json.loads((artifacts / "recommendation_table" / "artifact.json").read_text(encoding="utf-8"))
+    # 3. The table's checksums match the files on disk
+    receipt = read_json(output / "recommendation_table" / "artifact.json")
     for name in ("recommendations", "bucket_lists", "customer_lookup"):
-        assert sha256_of(manifest[f"{name}_path"]) == manifest[f"{name}_sha256"], name
+        assert sha256_of(receipt[f"{name}_path"]) == receipt[f"{name}_sha256"], name
+
+    # 4. The serving files: the right shapes, and they match their manifest checksums
+    serving = output / "recommendation_table" / "serving"
+    manifest = read_json(serving / "serving_manifest.json")
+    assert manifest["shapes"]["recs.npy"] == [21, 10]                             # 20 customers + empty row 0
+    assert manifest["shapes"]["lookup_ids.npy"] == [24]
+    for name, checksum in manifest["sha256"].items():
+        assert sha256_of(serving / name) == checksum, name
 
 
-def test_missing_day_fails_at_validation(tmp_path):
-    # Break the fixture on purpose: delete every purchase on one day (Wednesday 2020-08-05, week 5)
-    raw = tmp_path / "raw"
-    raw.mkdir()
+def test_missing_day_fails_at_validation(tmp_path, pipeline):
+    # Break the fixture on purpose: copy it, then delete every purchase on one day (2020-08-05)
+    broken = tmp_path / "raw"
+    broken.mkdir()
     for name in ("customers", "articles"):
-        (raw / f"{name}.parquet").write_bytes((FIXTURE / "raw" / f"{name}.parquet").read_bytes())
+        (broken / f"{name}.parquet").write_bytes((FIXTURE / "raw" / f"{name}.parquet").read_bytes())
     transactions = pq.read_table(FIXTURE / "raw" / "transactions_train.parquet")
-    pq.write_table(transactions.filter(pc.not_equal(transactions["t_dat"], "2020-08-05")),
-                   raw / "transactions_train.parquet")
+    without_that_day = transactions.filter(pc.not_equal(transactions["t_dat"], "2020-08-05"))
+    pq.write_table(without_that_day, broken / "transactions_train.parquet")
 
-    result, artifacts = run_pipeline(tmp_path, raw)
+    output = tmp_path / "artifacts"
+    finished = pipeline(broken, output)
 
-    assert result.returncode != 0
-    assert "Data validation failed" in result.stderr                 # a clear message, not a confusing crash later
-    report = json.loads((artifacts / "data_validation" / "report.json").read_text(encoding="utf-8"))
-    assert report["failed"] == ["dates"]                             # exactly the right check, nothing else
-    assert not (artifacts / "data_splitter").exists()                # nothing after validation ran
-    assert not (artifacts / "recommendation_table").exists()
+    assert finished.returncode != 0                                               # the run stopped
+    assert "Data validation failed" in finished.stderr                            # with a clear message
+    report = read_json(output / "data_validation" / "report.json")
+    assert report["failed"] == ["dates"]                                          # exactly the right check
+    assert not (output / "data_splitter").exists()                                # and nothing after it ran
+    assert not (output / "recommendation_table").exists()

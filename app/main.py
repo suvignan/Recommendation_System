@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.request_log import RequestLogger
 from recsys.utils.shared import age_bucket_for, customer_id_to_uint64, sha256_of
@@ -97,7 +98,9 @@ def version():
     return state.manifest
 
 def find_customer(customer_id):
-    """The customer's position in the lookup arrays, or None if we've never seen them."""
+    """The customer's position in the lookup arrays, or None if we've never seen them (or got no id)."""
+    if customer_id is None:                                     # POST without an id: a new visitor
+        return None
     number = np.uint64(customer_id_to_uint64(customer_id))
     position = int(np.searchsorted(state.lookup_ids, number))   # where it is, OR where it WOULD go
     if position < len(state.lookup_ids) and state.lookup_ids[position] == number:
@@ -129,12 +132,13 @@ def pick_list(customer_id, age):
     # Rule 4: nothing else -> the global list (bucket 0)
     return state.bucket_lists[0].tolist(), "global"
 
-@app.get("/recommend")
-def recommend(customer_id: str, response: Response, background_tasks: BackgroundTasks, age: float | None = None):
+def serve(customer_id, age, response, background_tasks):
+    """ONE copy of the work, used by both GET and POST /recommend. customer_id may be None (POST, new visitor)."""
     # 1. Check the input (422 = the caller sent something wrong)
-    customer_id = customer_id.lower()
-    if not VALID_ID.match(customer_id):
-        raise HTTPException(status_code=422, detail="customer_id must be 64 hexadecimal characters")
+    if customer_id is not None:
+        customer_id = customer_id.lower()
+        if not VALID_ID.match(customer_id):
+            raise HTTPException(status_code=422, detail="customer_id must be 64 hexadecimal characters")
     if age is not None and (age < 0 or age > 120):
         raise HTTPException(status_code=422, detail="age must be between 0 and 120")
 
@@ -149,7 +153,8 @@ def recommend(customer_id: str, response: Response, background_tasks: Background
     response.headers["X-Lookup-Ms"] = f"{lookup_ms:.3f}"
 
     # 4. Log it to Neon AFTER the response is sent, so a slow database never slows the customer down
-    background_tasks.add_task(request_log.log, customer_id, source, articles,
+    #    (a visitor without an id is logged as "anonymous", hashed like any other id)
+    background_tasks.add_task(request_log.log, customer_id or "anonymous", source, articles,
                               state.manifest["table_version"][:12], lookup_ms)
 
     return {
@@ -158,4 +163,22 @@ def recommend(customer_id: str, response: Response, background_tasks: Background
         "articles": articles,
         "table_version": state.manifest["table_version"][:12],
     }
+
+
+@app.get("/recommend")
+def recommend_get(customer_id: str, response: Response, background_tasks: BackgroundTasks, age: float | None = None):
+    """Quick testing: /recommend?customer_id=...&age=25 (the id is in the URL, so it shows up in access logs)."""
+    return serve(customer_id, age, response, background_tasks)
+
+
+class RecommendRequest(BaseModel):
+    """The JSON body of POST /recommend: what a visitor fills in. Both fields are optional."""
+    customer_id: str | None = None          # a known H&M customer id (64 hex characters), or nothing
+    age: float | None = None                # their age, or nothing
+
+
+@app.post("/recommend")
+def recommend_post(body: RecommendRequest, response: Response, background_tasks: BackgroundTasks):
+    """A form: {"customer_id": "...", "age": 25}. The id travels in the body, not the URL (not in access logs)."""
+    return serve(body.customer_id, body.age, response, background_tasks)
 

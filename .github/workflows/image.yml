@@ -1,4 +1,4 @@
-# Build the API image and push it to GitHub's registry (ghcr.io), tagged with the serving table's version.
+# Build the API image and push it to GitHub's registry (ghcr.io), tagged <table_version>-<git commit>.
 # Render deploys that image. Rolling back a bad week = deploying last week's tag.
 #
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions): DAGSHUB_USER and DAGSHUB_TOKEN,
@@ -66,7 +66,24 @@ jobs:
 
       - name: Build and push (tagged with the table version, and latest)
         run: |
+          # Tag = table version + code version (the git commit), so a CODE change with the same weekly table gets a
+          # NEW tag instead of overwriting the old one: every tag ever deployed stays available for rollback.
           IMAGE=ghcr.io/${{ github.repository_owner }}/recsys-api
-          docker build -t "$IMAGE:${{ steps.version.outputs.tag }}" -t "$IMAGE:latest" .
-          docker push "$IMAGE:${{ steps.version.outputs.tag }}"
+          TAG="${{ steps.version.outputs.tag }}-${GITHUB_SHA::7}"
+          echo "Image tag: $TAG"
+          docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$TAG"
           docker push "$IMAGE:latest"
+
+      - name: Tell Render to deploy the new image (no manual tag change)
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          # Render's service points at :latest; its secret Deploy Hook URL makes it pull and deploy the new image.
+          # Rollback: Render -> Events -> Rollback on an earlier deploy (each image also keeps its own tag).
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "No RENDER_DEPLOY_HOOK secret: skipping the automatic deploy (deploy by hand in Render)"
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
+          echo "Render deploy started"

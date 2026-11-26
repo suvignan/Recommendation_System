@@ -65,6 +65,29 @@ If the serving files didn't load or **any checksum didn't match**, `/recommend` 
 
 ---
 
+## `POST /recommend` (the form)
+
+The same rules and the same answer as `GET /recommend`, for a form where a visitor fills in what they know.
+The body is JSON; **both fields are optional**:
+
+```json
+{"customer_id": "00000dbacae5...c657", "age": 25}
+```
+
+| Body | Result |
+|---|---|
+| `{"customer_id": "..."}` | exactly what `GET /recommend?customer_id=...` returns |
+| `{"age": 25}` (a new visitor) | their age group's list -> `age_bucket` (`customer_id` is `null` in the response) |
+| `{}` (an empty form) | the global list -> `global` |
+| a malformed id, `age` < 0 or > 120, `age` not a number | **422**, the same decisions as GET |
+
+**Why both GET and POST:** GET is for quick testing (paste a URL in a browser). POST is for a real form: the id
+travels in the **body**, so it doesn't end up in URLs and access logs, and a new field later is one more line in
+the body, not a new URL. Both call the same `serve()` function, so they can never disagree.
+A visitor without an id is logged as the hash of `"anonymous"`.
+
+---
+
 ## `GET /health`
 
 **Liveness:** `200 {"status": "alive"}` as long as the process is running, even when not ready. It does no work, so

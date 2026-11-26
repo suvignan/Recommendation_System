@@ -118,3 +118,38 @@ def test_version_returns_the_manifest_checksum(serving, monkeypatch):
     manifest = (serving / "serving_manifest.json").read_text(encoding="utf-8")
     assert version["table_version"] in manifest
     assert ready["table_version"] == version["table_version"][:12]
+
+
+# ---- POST /recommend: the form version (both fields optional, the id travels in the body)
+
+def test_post_with_customer_id_gives_the_same_answer_as_get(serving, table, monkeypatch):
+    lookup = pd.read_parquet(table / "customer_lookup.parquet")
+    customer_id = lookup[lookup["has_history"]].iloc[0]["customer_id"]
+    with start_app(serving, monkeypatch) as client:
+        by_get = client.get("/recommend", params={"customer_id": customer_id}).json()
+        by_post = client.post("/recommend", json={"customer_id": customer_id}).json()
+    assert by_post == by_get                                            # one shared serve(): same rules, same list
+    assert by_post["source"] == "personal"
+
+
+def test_post_with_only_an_age_gives_that_age_group(serving, table, monkeypatch):
+    expected = list_of(pd.read_parquet(table / "bucket_lists.parquet"), "age_bucket", 3)     # 25 -> bucket 3
+    with start_app(serving, monkeypatch) as client:
+        response = client.post("/recommend", json={"age": 25})
+    assert response.status_code == 200
+    assert response.json() == {"customer_id": None, "source": "age_bucket", "articles": expected,
+                               "table_version": response.json()["table_version"]}
+
+
+def test_post_with_an_empty_form_gives_global(serving, monkeypatch):
+    with start_app(serving, monkeypatch) as client:
+        response = client.post("/recommend", json={})
+    assert response.status_code == 200
+    assert response.json()["source"] == "global"
+
+
+def test_post_bad_input_is_422_like_get(serving, monkeypatch):
+    with start_app(serving, monkeypatch) as client:
+        assert client.post("/recommend", json={"customer_id": "abc"}).status_code == 422
+        assert client.post("/recommend", json={"age": 150}).status_code == 422
+        assert client.post("/recommend", json={"age": "abc"}).status_code == 422        # Pydantic checks the type

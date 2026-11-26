@@ -1,0 +1,9 @@
+{
+    // Use the project's virtual environment (where recsys is installed with pip install -e .)
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    // Tell the code checker (Pylance) that `import recsys...` lives in src/ and `import app...` in the project root
+    "python.analysis.extraPaths": ["${workspaceFolder}/src", "${workspaceFolder}"],
+    // Run tests from VS Code's Testing panel the same way as on the command line
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"]
+}

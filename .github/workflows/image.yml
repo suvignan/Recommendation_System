@@ -38,6 +38,12 @@ jobs:
           DAGSHUB_USER: ${{ secrets.DAGSHUB_USER }}
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
+          # A wrong or missing login makes DagsHub say "not authorised", which DVC reports as "missing cache files".
+          # So check the secrets first and fail with a CLEAR message.
+          if [ -z "$DAGSHUB_USER" ] || [ -z "$DAGSHUB_TOKEN" ]; then
+            echo "::error::Repository secrets DAGSHUB_USER and/or DAGSHUB_TOKEN are not set (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
           pip install dvc==3.67.1
           dvc remote modify origin --local auth basic
           dvc remote modify origin --local user "$DAGSHUB_USER"

@@ -21,11 +21,13 @@ checked (`artifacts/recommendation_table/serving/`). It never trains, scores or 
   "customer_id": "00000dbacae5abe5e23885899a1fa44253a17956c6d1c3d25f88aa139fdfc657",
   "source": "personal",
   "articles": [568601043, 859416011, 795440001, 751471001, 448509014, 762846027, 806388001, 924243001, 918522001, 909370001],
+  "items": [{"article_id": 568601043, "name": "Mariette Blazer (Blazer, Dark Green)"}, "... 10 in total"],
   "table_version": "3f9a1c0b7d2e"
 }
 ```
 
 - `articles`: always **exactly 10 distinct article ids**, best first.
+- `items`: the same 10 articles in the same order, each with a readable name: `prod_name (product type, colour)`.
 - `source`: **where the list came from**, so "why did this customer get these?" is answered in the response itself:
   `personal` (their own history), `age_bucket` (popular last week with their age group), or `global` (popular last week overall).
 - `table_version`: the first 12 characters of the serving manifest's table checksum: which weekly build answered.
@@ -76,10 +78,13 @@ The body is JSON; **both fields are optional**:
 
 | Body | Result |
 |---|---|
-| `{"customer_id": "..."}` | exactly what `GET /recommend?customer_id=...` returns |
+| `{"customer_id": "..."}` (64 hex) | exactly what `GET /recommend?customer_id=...` returns |
+| `{"customer_id": 1234245}` (a number: your own id) | turned into the SHA-256 of `"1234245"` (64 hex), returned as `customer_id`, then served like any id: a new customer, so `age_bucket` or `global`. The returned id works in GET and gives the same answer |
 | `{"age": 25}` (a new visitor) | their age group's list -> `age_bucket` (`customer_id` is `null` in the response) |
 | `{}` (an empty form) | the global list -> `global` |
-| a malformed id, `age` < 0 or > 120, `age` not a number | **422**, the same decisions as GET |
+| text that isn't 64 hex (`"a123"`), a negative number, `age` < 0 or > 120, `age` not a number | **422** |
+
+GET stays strict (64 hex only): a mistyped real id there gets a clear 422 instead of a silent `global` list.
 
 **Why both GET and POST:** GET is for quick testing (paste a URL in a browser). POST is for a real form: the id
 travels in the **body**, so it doesn't end up in URLs and access logs, and a new field later is one more line in
@@ -117,13 +122,16 @@ All in `artifacts/recommendation_table/serving/` (written by the table stage, ne
 | `lookup_ids.npy` | uint64, (all known customers,) | 64-bit customer ids, **strictly increasing** (sorted, no duplicates) |
 | `lookup_rec_row.npy` | int32, same length | that customer's row in `recs.npy`; **0 = no history** |
 | `lookup_bucket.npy` | int8, same length | the stored age bucket (0 = unknown) |
+| `article_names.json` | JSON | `{"article_id": "name (type, colour)"}` for every article in the two lists above, no others |
 | `serving_manifest.json` | JSON | `sha256` of every file above, `table_version`, `git_commit`, `history_end_week`, `built_at` |
 
 **The 64-bit id:** the last 16 hex characters of `customer_id`, read as an unsigned 64-bit number. One function
 (`recsys.utils.shared.customer_id_to_uint64`) does this for **both** the pipeline and the API. The pipeline checks the
 sorted ids are strictly increasing, which also proves there are no collisions.
 
-`table_version` = SHA-256 of the per-file checksums (sorted by file name, joined), so it changes if **any** file changes.
+`table_version` = SHA-256 of the five `.npy` files' checksums (sorted by file name, joined), so it changes if **any
+recommendation** changes. `article_names.json` is left out on purpose: names are labels, not recommendations. It still
+has its own checksum, so `/ready` refuses a damaged names file like any other.
 
 **Why a separate "rec row", not the pipeline's `customer_join_idx`:** two reasons.
 1. `customer_join_idx` **0 is a real customer** (file order, Day 1), so "0 = no history" would make that customer

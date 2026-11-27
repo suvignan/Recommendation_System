@@ -3,6 +3,7 @@
 The app is pointed at the serving files the FIXTURE pipeline built (conftest.py `fixture_run`), so these tests
 need no real data and run in CI. TestClient sends requests to the app directly, without starting a server.
 """
+import hashlib
 import shutil
 
 import pandas as pd
@@ -48,6 +49,11 @@ def test_customer_with_history_gets_their_own_list(serving, table, monkeypatch):
     assert response.json()["source"] == "personal"
     assert response.json()["articles"] == expected
     assert float(response.headers["X-Lookup-Ms"]) >= 0                # the timing header is there
+
+    # items = the same articles, in the same order, each with its name from the articles file
+    items = response.json()["items"]
+    assert [item["article_id"] for item in items] == expected
+    assert items[0]["name"].startswith("Fixture item")              # the fixture's prod_name
 
 
 def test_never_buyer_gets_their_stored_age_bucket(serving, table, monkeypatch):
@@ -137,8 +143,9 @@ def test_post_with_only_an_age_gives_that_age_group(serving, table, monkeypatch)
     with start_app(serving, monkeypatch) as client:
         response = client.post("/recommend", json={"age": 25})
     assert response.status_code == 200
-    assert response.json() == {"customer_id": None, "source": "age_bucket", "articles": expected,
-                               "table_version": response.json()["table_version"]}
+    assert response.json()["customer_id"] is None
+    assert response.json()["source"] == "age_bucket"
+    assert response.json()["articles"] == expected
 
 
 def test_post_with_an_empty_form_gives_global(serving, monkeypatch):
@@ -148,8 +155,18 @@ def test_post_with_an_empty_form_gives_global(serving, monkeypatch):
     assert response.json()["source"] == "global"
 
 
+def test_post_turns_a_number_id_into_a_hex_id_that_get_accepts(serving, monkeypatch):
+    with start_app(serving, monkeypatch) as client:
+        by_post = client.post("/recommend", json={"customer_id": 1234245, "age": 25}).json()
+        by_get = client.get("/recommend", params={"customer_id": by_post["customer_id"], "age": 25}).json()
+    assert by_post["customer_id"] == hashlib.sha256(b"1234245").hexdigest()     # 64 hex characters
+    assert by_get == by_post                                                     # GET takes it: same answer
+    assert by_post["source"] == "age_bucket"                                     # still a NEW customer
+
+
 def test_post_bad_input_is_422_like_get(serving, monkeypatch):
     with start_app(serving, monkeypatch) as client:
-        assert client.post("/recommend", json={"customer_id": "abc"}).status_code == 422
+        assert client.post("/recommend", json={"customer_id": "a123"}).status_code == 422    # text, not H&M hex
+        assert client.post("/recommend", json={"customer_id": -5}).status_code == 422        # negative number
         assert client.post("/recommend", json={"age": 150}).status_code == 422
         assert client.post("/recommend", json={"age": "abc"}).status_code == 422        # Pydantic checks the type

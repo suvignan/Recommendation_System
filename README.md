@@ -15,8 +15,22 @@ curl "https://recommendation-system-bl3v.onrender.com/recommend?customer_id=ffff
 ```json
 {"customer_id": "ffff...ffff", "source": "age_bucket",
  "articles": [924243001, 866731001, 909370001, 924243002, 918292001, 923758001, 934835001, 889550002, 762846027, 915529005],
+ "items": [{"article_id": 924243001, "name": "Ohlsson (Sweater, Beige)"},
+           {"article_id": 866731001, "name": "LANA seamless HW tigths (Leggings/Tights, Black)"}, "...10 in total"],
  "table_version": "e98416179442"}
 ```
+
+**Try it in the browser:** open `/docs`, pick `GET /recommend` → *Try it out*, and choose one of these real H&M
+customer IDs from the **Examples** dropdown (an H&M customer ID is already a 64-character hex string). To try a brand-new
+customer, change a few of its letters (0–9, a–f only): the API won't find it and falls back to the age or global list.
+
+| What you'll see | `customer_id` |
+|---|---|
+| `personal`: bought recently, so gets their own list | `00000dbacae5abe5e23885899a1fa44253a17956c6d1c3d25f88aa139fdfc657` |
+| `age_bucket`: no recent purchases, so gets the list for their age group | `00005ca1c9ed5f5146b52ac8639a40ca9d57aeff4d1bd2c5feb1ca5dff07c43e` |
+| `global`: no recent purchases and no usable age | `000064249685c11552da43ef22a5030f35a147f723d5b02ddd9fd22452b1f5a6` |
+
+No ID? Use `POST /recommend` with `{"age": 25}` (a new visitor) or `{}` (anonymous) instead.
 
 ---
 
@@ -36,6 +50,11 @@ report the test week (week 11) **once**, with the system frozen beforehand.
 
 The final system is **2.7× last-week popularity on validation and 2.3× on test**, and the **top three models kept
 their exact order** from validation to test, so the choice made on validation held up on unseen data.
+
+**Reproducible end to end:** a fresh clone on a clean machine, rebuilt from the raw files with `dvc repro --force`
+(9 minutes), reproduces the validation recall to the last digit (difference 0.0) and the same serving table,
+`table_version` **`e98416179442`**: the same value as the original build, the Docker image tag and the live
+`/version`.
 
 - **Warm** = bought something in the history weeks; **cold** = no purchases in the history weeks (31% of test-week
   buyers).

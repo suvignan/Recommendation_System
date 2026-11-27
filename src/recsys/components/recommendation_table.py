@@ -92,7 +92,20 @@ def table_version(file_checksums):
     return hashlib.sha256(text.strip().encode()).hexdigest()
 
 
-def write_serving_files(recommendations, bucket_table, lookup, k, history_end_week, age_edges, folder):
+def build_article_names(articles, recs, bucket_lists):
+    """{article_id (as text): "Mariette Blazer (Blazer, Dark Green)"} for every article we can serve, and no others."""
+    served = set(recs.flatten().tolist()) | set(bucket_lists.flatten().tolist())
+    served.discard(0)                                  # row 0 of recs is all zeros, not an article
+    names = {}
+    for row in articles.itertuples():
+        if row.article_id in served:
+            names[str(row.article_id)] = f"{row.prod_name} ({row.product_type_name}, {row.colour_group_name})"
+    if len(names) != len(served):
+        raise ValueError(f"{len(served) - len(names)} served articles have no name in the articles file")
+    return names
+
+
+def write_serving_files(recommendations, bucket_table, lookup, k, history_end_week, age_edges, folder, articles):
     """The serving format + its manifest. Returns (manifest path, table_version)."""
     recs, rec_row_of = build_recs(recommendations, k)
     bucket_lists = build_bucket_lists(bucket_table, k)
@@ -114,10 +127,16 @@ def write_serving_files(recommendations, bucket_table, lookup, k, history_end_we
         checksums[name] = sha256_of(folder / name)
         shapes[name] = list(array.shape)
 
+    # table_version = the RECOMMENDATIONS (the 5 arrays). Names are only labels: they get a checksum (so /ready
+    # still refuses a broken file) but don't change the version, because they don't change what we recommend.
+    version = table_version(checksums)
+    save_json(build_article_names(articles, recs, bucket_lists), folder / 'article_names.json')
+    checksums['article_names.json'] = sha256_of(folder / 'article_names.json')
+
     # The manifest: what the API checks at startup before it serves anything
     commit, dirty = git_commit()
     manifest = {
-        'table_version': table_version(checksums),
+        'table_version': version,
         'sha256': checksums,
         'git_commit': commit,
         'git_dirty': dirty,
@@ -192,7 +211,8 @@ class RecommendationTable:
 
             # 5. Format 2: the serving arrays (for answering requests); build_recs re-checks every list
             manifest_path, version = write_serving_files(recommendations, bucket_lists, lookup, c.k,
-                                                         c.history_end_week, c.age_edges, c.output_dir / 'serving')
+                                                         c.history_end_week, c.age_edges, c.output_dir / 'serving',
+                                                         pd.read_parquet(c.articles_path))
 
             logger.info(f"Recommendation table finished in {time.perf_counter() - start_time:.1f}s -> {c.output_dir}")
             return RecommendationTableArtifact(

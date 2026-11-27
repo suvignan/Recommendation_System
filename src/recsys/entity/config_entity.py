@@ -218,6 +218,7 @@ def get_evaluation_config(ingestion_artifact: DataIngestionArtifact, splitter_ar
 class RecommendationTableConfig:
     gate_passed: bool                # from the evaluation artifact: a recipe that failed evaluation never builds a table
     customers_path: Path             # ingestion: customer_id, customer_join_idx, age (ALL customers, buyers or not)
+    articles_path: Path              # ingestion: article names, so the API can say WHAT it recommends
     repurchase_path: Path            # serving lists (ListBuilder, history_end_week = serving week)
     age_bucket_path: Path
     user_factors_path: Path          # serving ALS (ModelTrainer, same history)
@@ -238,6 +239,7 @@ def get_table_config(ingestion_artifact: DataIngestionArtifact, evaluation_artif
     return RecommendationTableConfig(
         gate_passed=evaluation_artifact.gate_passed,
         customers_path=ingestion_artifact.customers_path,
+        articles_path=ingestion_artifact.articles_path,
         repurchase_path=lists_artifact.repurchase_path,
         age_bucket_path=lists_artifact.age_bucket_path,
         user_factors_path=trainer_artifact.user_factors_path,

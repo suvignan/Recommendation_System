@@ -331,8 +331,8 @@ stages:
       size: 11406
     - path: src/recsys/components/recommendation_table.py
       hash: md5
-      md5: e83f9673ee6c81b661e45a276edca3a7
-      size: 10712
+      md5: a6b27f0b7c968eff26acc771ecb56406
+      size: 11969
     - path: src/recsys/utils/shared.py
       hash: md5
       md5: 045bbf614762a5fcbdb36ff9cb026838
@@ -353,9 +353,9 @@ stages:
     outs:
     - path: artifacts/recommendation_table
       hash: md5
-      md5: 5a9cdcfdd7a18a809d955b8c7f53022b.dir
-      size: 140494407
-      nfiles: 10
+      md5: a5557e0c429fe4381bdf7fadf8f95d2d.dir
+      size: 142674404
+      nfiles: 11
   serve_export:
     cmd: python -m recsys.pipeline.run --stage export
     deps:

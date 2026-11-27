@@ -1,4 +1,5 @@
 """The recommendation API: looks up the lists the weekly pipeline built. Rules: app/CONTRACT.md."""
+import hashlib
 import json
 import logging
 import os
@@ -8,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -19,7 +20,8 @@ PROJECT = Path(__file__).resolve().parents[1]                 # app/main.py -> t
 DEFAULT_FOLDER = PROJECT / "artifacts" / "recommendation_table" / "serving"
 SERVING_FOLDER = Path(os.environ.get("SERVING_DIR", DEFAULT_FOLDER))   # tests point this at the fixture's files
 
-FILES = ["recs.npy", "bucket_lists.npy", "lookup_ids.npy", "lookup_rec_row.npy", "lookup_bucket.npy"]
+FILES = ["recs.npy", "bucket_lists.npy", "lookup_ids.npy", "lookup_rec_row.npy", "lookup_bucket.npy",
+         "article_names.json"]
 VALID_ID = re.compile(r"^[0-9a-f]{64}$")                       # exactly 64 characters, each 0-9 or a-f
 
 logger = logging.getLogger("uvicorn.error")                    # uvicorn's own logger, so lines show in its output
@@ -34,7 +36,8 @@ class ServingState:
         self.lookup_ids = None
         self.lookup_rec_row = None
         self.lookup_bucket = None
-    
+        self.article_names = None
+
     def load(self,folder):
         manifest_path = folder / "serving_manifest.json"
         if not manifest_path.exists():
@@ -57,6 +60,7 @@ class ServingState:
         self.lookup_ids = np.load(folder/"lookup_ids.npy")
         self.lookup_rec_row = np.load(folder/"lookup_rec_row.npy")
         self.lookup_bucket = np.load(folder/"lookup_bucket.npy")
+        self.article_names = json.loads((folder/"article_names.json").read_text(encoding="utf-8"))
         self.ready = True
         self.reason =""
 state = ServingState()
@@ -161,24 +165,59 @@ def serve(customer_id, age, response, background_tasks):
         "customer_id": customer_id,
         "source": source,
         "articles": articles,
+        # the same articles, readable: what a person testing the API actually wants to see
+        "items": [{"article_id": article, "name": state.article_names[str(article)]} for article in articles],
         "table_version": state.manifest["table_version"][:12],
     }
 
 
+# Real H&M ids for the /docs dropdown, one per source. Change a few letters (0-9, a-f) = a brand-new customer.
+EXAMPLE_IDS = {
+    "personal": {"summary": "bought recently: their own list",
+                 "value": "00000dbacae5abe5e23885899a1fa44253a17956c6d1c3d25f88aa139fdfc657"},
+    "age_bucket": {"summary": "no recent purchases: their age group's list",
+                   "value": "00005ca1c9ed5f5146b52ac8639a40ca9d57aeff4d1bd2c5feb1ca5dff07c43e"},
+    "global": {"summary": "no recent purchases, no usable age: the global list",
+               "value": "000064249685c11552da43ef22a5030f35a147f723d5b02ddd9fd22452b1f5a6"},
+}
+
+
 @app.get("/recommend")
-def recommend_get(customer_id: str, response: Response, background_tasks: BackgroundTasks, age: float | None = None):
+def recommend_get(response: Response, background_tasks: BackgroundTasks,
+                  customer_id: str = Query(openapi_examples=EXAMPLE_IDS,
+                                           description="64 hex characters. Edit a few letters to try a new customer."),
+                  age: float | None = None):
     """Quick testing: /recommend?customer_id=...&age=25 (the id is in the URL, so it shows up in access logs)."""
     return serve(customer_id, age, response, background_tasks)
 
 
 class RecommendRequest(BaseModel):
     """The JSON body of POST /recommend: what a visitor fills in. Both fields are optional."""
-    customer_id: str | None = None          # a known H&M customer id (64 hex characters), or nothing
+    customer_id: int | str | None = None    # your own number id (1234245), a real H&M id (64 hex text), or nothing
     age: float | None = None                # their age, or nothing
 
 
+# The /docs dropdown for POST (without it, /docs pre-fills "customer_id": "string", which is a 422)
+EXAMPLE_BODIES = {
+    "new_visitor": {"summary": "new visitor: only an age", "value": {"age": 25}},
+    "anonymous": {"summary": "anonymous: nothing at all", "value": {}},
+    "number_id": {"summary": "your own number id: turned into a hex id you can reuse in GET",
+                  "value": {"customer_id": 1234245, "age": 25}},
+}
+for name, example in EXAMPLE_IDS.items():          # the same three real ids as GET
+    EXAMPLE_BODIES[name] = {"summary": example["summary"], "value": {"customer_id": example["value"]}}
+
+
 @app.post("/recommend")
-def recommend_post(body: RecommendRequest, response: Response, background_tasks: BackgroundTasks):
+def recommend_post(response: Response, background_tasks: BackgroundTasks,
+                   body: RecommendRequest = Body(openapi_examples=EXAMPLE_BODIES)):
     """A form: {"customer_id": "...", "age": 25}. The id travels in the body, not the URL (not in access logs)."""
-    return serve(body.customer_id, body.age, response, background_tasks)
+    customer_id = body.customer_id
+    # A number id (1234245) becomes 64 hex characters: its SHA-256. Same number -> same hex id, so the id in the
+    # response also works in GET. Text must be a real H&M id (64 hex): serve() gives a 422 for anything else ("a123").
+    if isinstance(customer_id, int):
+        if customer_id < 0:
+            raise HTTPException(status_code=422, detail="customer_id must be a positive number or 64 hex characters")
+        customer_id = hashlib.sha256(str(customer_id).encode()).hexdigest()
+    return serve(customer_id, body.age, response, background_tasks)
 

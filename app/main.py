@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
-from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -171,22 +171,8 @@ def serve(customer_id, age, response, background_tasks):
     }
 
 
-# Real H&M ids for the /docs dropdown, one per source. Change a few letters (0-9, a-f) = a brand-new customer.
-EXAMPLE_IDS = {
-    "personal": {"summary": "bought recently: their own list",
-                 "value": "00000dbacae5abe5e23885899a1fa44253a17956c6d1c3d25f88aa139fdfc657"},
-    "age_bucket": {"summary": "no recent purchases: their age group's list",
-                   "value": "00005ca1c9ed5f5146b52ac8639a40ca9d57aeff4d1bd2c5feb1ca5dff07c43e"},
-    "global": {"summary": "no recent purchases, no usable age: the global list",
-               "value": "000064249685c11552da43ef22a5030f35a147f723d5b02ddd9fd22452b1f5a6"},
-}
-
-
 @app.get("/recommend")
-def recommend_get(response: Response, background_tasks: BackgroundTasks,
-                  customer_id: str = Query(openapi_examples=EXAMPLE_IDS,
-                                           description="64 hex characters. Edit a few letters to try a new customer."),
-                  age: float | None = None):
+def recommend_get(customer_id: str, response: Response, background_tasks: BackgroundTasks, age: float | None = None):
     """Quick testing: /recommend?customer_id=...&age=25 (the id is in the URL, so it shows up in access logs)."""
     return serve(customer_id, age, response, background_tasks)
 
@@ -196,21 +182,12 @@ class RecommendRequest(BaseModel):
     customer_id: int | str | None = None    # your own number id (1234245), a real H&M id (64 hex text), or nothing
     age: float | None = None                # their age, or nothing
 
-
-# The /docs dropdown for POST (without it, /docs pre-fills "customer_id": "string", which is a 422)
-EXAMPLE_BODIES = {
-    "new_visitor": {"summary": "new visitor: only an age", "value": {"age": 25}},
-    "anonymous": {"summary": "anonymous: nothing at all", "value": {}},
-    "number_id": {"summary": "your own number id: turned into a hex id you can reuse in GET",
-                  "value": {"customer_id": 1234245, "age": 25}},
-}
-for name, example in EXAMPLE_IDS.items():          # the same three real ids as GET
-    EXAMPLE_BODIES[name] = {"summary": example["summary"], "value": {"customer_id": example["value"]}}
+    # what the /docs page pre-fills (otherwise it shows "customer_id": "string", which is a 422)
+    model_config = {"json_schema_extra": {"examples": [{"customer_id": 1234245, "age": 25}]}}
 
 
 @app.post("/recommend")
-def recommend_post(response: Response, background_tasks: BackgroundTasks,
-                   body: RecommendRequest = Body(openapi_examples=EXAMPLE_BODIES)):
+def recommend_post(body: RecommendRequest, response: Response, background_tasks: BackgroundTasks):
     """A form: {"customer_id": "...", "age": 25}. The id travels in the body, not the URL (not in access logs)."""
     customer_id = body.customer_id
     # A number id (1234245) becomes 64 hex characters: its SHA-256. Same number -> same hex id, so the id in the

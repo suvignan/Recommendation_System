@@ -20,9 +20,8 @@ curl "https://recommendation-system-bl3v.onrender.com/recommend?customer_id=ffff
  "table_version": "e98416179442"}
 ```
 
-**Try it in the browser:** open `/docs`, pick `GET /recommend` → *Try it out*, and choose one of these real H&M
-customer IDs from the **Examples** dropdown (an H&M customer ID is already a 64-character hex string). To try a brand-new
-customer, change a few of its letters (0–9, a–f only): the API won't find it and falls back to the age or global list.
+**Try it in the browser:** open `/docs`, pick `GET /recommend` → *Try it out*, and paste one of these real H&M
+customer IDs (an H&M customer ID is already a 64-character hex string, so use it exactly as shown):
 
 | What you'll see | `customer_id` |
 |---|---|
@@ -30,7 +29,8 @@ customer, change a few of its letters (0–9, a–f only): the API won't find it
 | `age_bucket`: no recent purchases, so gets the list for their age group | `00005ca1c9ed5f5146b52ac8639a40ca9d57aeff4d1bd2c5feb1ca5dff07c43e` |
 | `global`: no recent purchases and no usable age | `000064249685c11552da43ef22a5030f35a147f723d5b02ddd9fd22452b1f5a6` |
 
-No ID? Use `POST /recommend` with `{"age": 25}` (a new visitor) or `{}` (anonymous) instead.
+No H&M ID? Use `POST /recommend` with your own number, `{"customer_id": 1234245, "age": 25}`. It comes back as a
+64-hex ID you can reuse in GET (send the same age: nothing is stored). `{"age": 25}` alone or `{}` work too.
 
 ---
 

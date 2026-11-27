@@ -1,0 +1,9 @@
+# Every text file is stored AND checked out with LF line endings, on every OS (even with core.autocrlf=true).
+# Why: DVC fingerprints code files byte by byte, so CRLF on a Windows clone would make `dvc status`
+# report the pipeline code as "modified" even though nothing changed.
+* text=auto eol=lf
+
+# Never touch binary files
+*.parquet binary
+*.npy binary
+*.png binary

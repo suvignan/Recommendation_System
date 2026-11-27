@@ -116,6 +116,20 @@ def test_tampered_file_is_never_served(serving, tmp_path, monkeypatch):
         assert client.get("/recommend", params={"customer_id": UNKNOWN_ID}).status_code == 503
 
 
+def test_tampered_names_file_is_never_served(serving, tmp_path, monkeypatch):
+    # Names don't count in table_version, but they still have a checksum: a changed name = not ready
+    tampered = tmp_path / "serving"
+    shutil.copytree(serving, tampered)
+    text = (tampered / "article_names.json").read_text(encoding="utf-8")
+    (tampered / "article_names.json").write_text(text.replace("Fixture item", "Wrong item", 1), encoding="utf-8")
+
+    with start_app(tampered, monkeypatch) as client:
+        ready = client.get("/ready")
+        assert ready.status_code == 503
+        assert "article_names.json" in ready.json()["reason"]
+        assert client.get("/recommend", params={"customer_id": UNKNOWN_ID}).status_code == 503
+
+
 def test_version_returns_the_manifest_checksum(serving, monkeypatch):
     with start_app(serving, monkeypatch) as client:
         version = client.get("/version").json()

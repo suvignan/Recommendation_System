@@ -173,7 +173,7 @@ def test_post_turns_a_number_id_into_a_hex_id_that_get_accepts(serving, monkeypa
     with start_app(serving, monkeypatch) as client:
         by_post = client.post("/recommend", json={"customer_id": 1234245, "age": 25}).json()
         by_get = client.get("/recommend", params={"customer_id": by_post["customer_id"], "age": 25}).json()
-    assert by_post["customer_id"] == hashlib.sha256(b"1234245").hexdigest()     # 64 hex characters
+    assert by_post["customer_id"] == hashlib.sha256(b"visitor:1234245").hexdigest()     # 64 hex characters
     assert by_get == by_post                                                     # GET takes it: same answer
     assert by_post["source"] == "age_bucket"                                     # still a NEW customer
 

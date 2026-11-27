@@ -79,7 +79,7 @@ The body is JSON; **both fields are optional**:
 | Body | Result |
 |---|---|
 | `{"customer_id": "..."}` (64 hex) | exactly what `GET /recommend?customer_id=...` returns |
-| `{"customer_id": 1234245}` (a number: your own id) | turned into the SHA-256 of `"1234245"` (64 hex), returned as `customer_id`, then served like any id: a new customer, so `age_bucket` or `global`. The returned id works in GET and gives the same answer |
+| `{"customer_id": 1234245}` (a number: your own id) | turned into the SHA-256 of `"visitor:1234245"` (64 hex; the prefix means it can never equal a real H&M id), returned as `customer_id`, then served like any id: a new customer, so `age_bucket` or `global`. The returned id works in GET and gives the same answer |
 | `{"age": 25}` (a new visitor) | their age group's list -> `age_bucket` (`customer_id` is `null` in the response) |
 | `{}` (an empty form) | the global list -> `global` |
 | text that isn't 64 hex (`"a123"`), a negative number, `age` < 0 or > 120, `age` not a number | **422** |

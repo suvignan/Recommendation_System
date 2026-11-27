@@ -195,6 +195,7 @@ def recommend_post(body: RecommendRequest, response: Response, background_tasks:
     if isinstance(customer_id, int):
         if customer_id < 0:
             raise HTTPException(status_code=422, detail="customer_id must be a positive number or 64 hex characters")
-        customer_id = hashlib.sha256(str(customer_id).encode()).hexdigest()
+        # "visitor:" first: a visitor's id can never equal a real H&M id, whatever scheme H&M used to make theirs
+        customer_id = hashlib.sha256(f"visitor:{customer_id}".encode()).hexdigest()
     return serve(customer_id, body.age, response, background_tasks)
 
